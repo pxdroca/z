@@ -114,7 +114,10 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\('score_updater.py', encoding='utf-8'\\).read\\(\\)\\)\")",
       "Bash(venv/Scripts/python.exe generate_session_string.py)",
       "Bash(venv/Scripts/python.exe score_updater.py --once)",
-      "Bash(gh auth *)"
+      "Bash(gh auth *)",
+      "Bash(git ls-remote *)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)"
     ]
   }
 }
