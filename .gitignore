@@ -8,6 +8,10 @@
 # agendadas etc.) — nunca deve ir para um repositório público.
 .claude/
 
+# Documentação mantida só localmente — repositório público sem explicação
+# visível do que o projeto faz.
+README.md
+
 # Python
 __pycache__/
 *.pyc
