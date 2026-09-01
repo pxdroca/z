@@ -1,11 +1,15 @@
 # 🎾 Tennis Bet Monitor
 
-Aplicação 100% gratuita e local que escuta um grupo privado do Telegram com
-tips de apostas de tênis, extrai os dados dos prints/textos, confirma o
-confronto oficial (via SofaScore) e tenta achar o link de cada casa de
-apostas (Superbet, Betano, bet365 — configurável), entregando tudo em dois
-lugares: uma notificação no seu Telegram privado (com um botão por casa) e
-um painel web (Streamlit).
+Aplicação 100% gratuita que escuta um grupo privado do Telegram com tips de
+apostas de tênis, extrai os dados dos prints/textos, confirma o confronto
+oficial (via SofaScore) e tenta achar o link de cada casa de apostas
+(Superbet, Betano, bet365 — configurável), entregando tudo em dois lugares:
+uma notificação no seu Telegram privado (com um botão por casa) e um painel
+web (Streamlit).
+
+Pode rodar **100% na nuvem gratuita** (GitHub Actions + Neon + Streamlit
+Community Cloud — ver [Deploy em produção](#deploy-em-produção-nuvem-100-gratuita))
+ou **localmente** na sua máquina, com escuta em tempo real.
 
 ## Índice
 
@@ -15,12 +19,13 @@ um painel web (Streamlit).
 4. [Passo a passo: credenciais do Telegram](#passo-a-passo-credenciais-do-telegram)
 5. [Instalação](#instalação)
 6. [Configuração (.env)](#configuração-env)
-7. [Rodando o projeto](#rodando-o-projeto)
-8. [Calibrando o extractor (OCR)](#calibrando-o-extractor-ocr)
-9. [Calibrando o SofaScore (fonte do confronto oficial)](#calibrando-o-sofascore-fonte-do-confronto-oficial)
-10. [Calibrando os adaptadores de casas de apostas](#calibrando-os-adaptadores-de-casas-de-apostas)
-11. [Scraping, stealth e Termos de Uso — leia isto](#scraping-stealth-e-termos-de-uso--leia-isto)
-12. [Limitações conhecidas](#limitações-conhecidas)
+7. [Rodando localmente](#rodando-localmente)
+8. [Deploy em produção (nuvem 100% gratuita)](#deploy-em-produção-nuvem-100-gratuita)
+9. [Calibrando o extractor (OCR)](#calibrando-o-extractor-ocr)
+10. [Calibrando o SofaScore (fonte do confronto oficial)](#calibrando-o-sofascore-fonte-do-confronto-oficial)
+11. [Calibrando os adaptadores de casas de apostas](#calibrando-os-adaptadores-de-casas-de-apostas)
+12. [Scraping, stealth e Termos de Uso — leia isto](#scraping-stealth-e-termos-de-uso--leia-isto)
+13. [Limitações conhecidas](#limitações-conhecidas)
 
 ---
 
@@ -40,11 +45,16 @@ Grupo privado (Telegram)
         │                                                       (confirma jogo oficial:      (1 link por casa:
         │                                                        nomes, torneio, hora)         Superbet/Betano/bet365)
         ▼                                                                     └────────────┬────────────┘
-   database.py  ◀──────────────────────────────── salva tudo no SQLite ───────────────────┘
+   database.py  ◀───────────────────────── salva tudo no Postgres (Neon) ──────────────────┘
         │
         ├──▶ notifier.py ──▶ Bot API do Telegram ──▶ seu chat privado (1 botão por casa)
         └──▶ app.py (Streamlit) ──▶ painel web com filtros e 1 botão por casa
 ```
+
+Em produção, `listener.py` e `score_updater.py` não ficam rodando 24/7 —
+eles rodam em modo "poll and exit" (`--poll-once`/`--once`), disparados por
+cron do GitHub Actions a cada 5 minutos. Ver
+[Deploy em produção](#deploy-em-produção-nuvem-100-gratuita).
 
 ## Por que essa arquitetura (e não só "ler a Superbet")
 
@@ -83,13 +93,16 @@ fricção. A solução adotada aqui separa o problema em duas partes:
 
 ```
 tennis_bet_monitor/
-├── .env                    # suas credenciais reais (você cria a partir do .env.example)
-├── .env.example            # template de configuração
+├── .env                       # suas credenciais reais (você cria a partir do .env.example)
+├── .env.example                # template de configuração
+├── .github/workflows/            # cron do GitHub Actions (produção — ver seção de deploy)
+│   ├── poll-listener.yml            # roda listener.py --poll-once a cada 5 min
+│   └── score-updater.yml            # roda score_updater.py --once a cada 5 min
 ├── requirements.txt        # dependências (todas gratuitas/open source)
 ├── config.py               # leitura centralizada do .env
 ├── models.py                # dataclasses compartilhados (Bet, ExtractedBet, MatchInfo)
 ├── nameutils.py             # normalização e fuzzy-match de nomes de jogadores
-├── database.py               # camada SQLite (schema + CRUD)
+├── database.py               # camada Postgres/Neon (schema + CRUD)
 ├── extractor.py               # OCR (EasyOCR local ou Gemini free tier) + parsing
 ├── sofascore_client.py         # confronto oficial via SofaScore (nomes/torneio/hora)
 ├── matcher.py                   # orquestra sofascore_client + bookmakers/
@@ -99,13 +112,12 @@ tennis_bet_monitor/
 │   ├── betano.py                    # adaptador Betano (confiança média/baixa — ver avisos)
 │   └── bet365.py                     # adaptador bet365 (confiança mais baixa — ver avisos)
 ├── notifier.py               # envio da notificação formatada, 1 botão por casa (Bot API)
-├── listener.py               # userbot Telethon, orquestra todo o pipeline
+├── listener.py               # userbot Telethon — escuta contínua (local) ou --poll-once (produção)
+├── generate_session_string.py # utilitário local: gera a StringSession pro secret do GitHub Actions
 ├── app.py                    # dashboard Streamlit
-├── data/
-│   └── apostas.db           # banco SQLite (criado automaticamente)
 ├── media/                    # prints baixados do Telegram (criado automaticamente)
 └── logs/
-    └── listener.log           # log do listener (criado automaticamente)
+    └── listener.log           # log do listener (criado automaticamente, uso local)
 ```
 
 ## Passo a passo: credenciais do Telegram
@@ -121,13 +133,16 @@ Você vai precisar de **duas** credenciais diferentes, para dois propósitos dif
    e clique em **"Create application"**.
 4. Anote os valores de **`api_id`** (número) e **`api_hash`** (string longa) —
    eles vão para `TELEGRAM_API_ID` e `TELEGRAM_API_HASH` no `.env`.
-5. Na primeira execução do `listener.py`, o Telethon vai pedir seu número de
-   telefone e o código de confirmação recebido por SMS/Telegram — isso cria
-   um arquivo de sessão local (`tennis_monitor_session.session`) e você não
-   precisa logar de novo depois.
+5. Na primeira execução local do `listener.py`, o Telethon vai pedir seu
+   número de telefone e o código de confirmação recebido por SMS/Telegram —
+   isso cria um arquivo de sessão local (`tennis_monitor_session.session`) e
+   você não precisa logar de novo depois. (Pra rodar em produção via GitHub
+   Actions, veja `generate_session_string.py` na seção
+   [Deploy em produção](#deploy-em-produção-nuvem-100-gratuita) — o runner
+   não tem como fazer esse login interativo.)
 
-⚠️ **Trate `api_id`/`api_hash` e o arquivo `.session` como senha** — quem tiver
-acesso a eles pode logar como você.
+⚠️ **Trate `api_id`/`api_hash`, o arquivo `.session` e a `TELEGRAM_SESSION_STRING`
+como senha** — quem tiver acesso a eles pode logar como você.
 
 ### B) Token do Bot (para receber a notificação privada)
 
@@ -142,7 +157,7 @@ acesso a eles pode logar como você.
    (ou envie qualquer mensagem a ele) antes de rodar o projeto — bots não
    podem iniciar conversas, só responder a quem já falou com eles primeiro.
 
-### Descobrindo o ID do grupo privado de tips (`TELEGRAM_SOURCE_CHAT`)
+### Descobrindo o grupo privado de tips (`TELEGRAM_SOURCE_CHAT`)
 
 Depois de instalar as dependências (próxima seção), rode:
 
@@ -150,9 +165,18 @@ Depois de instalar as dependências (próxima seção), rode:
 python listener.py --list-chats
 ```
 
-Isso lista todos os seus chats com o ID de cada um. Encontre o grupo de tips
-na lista e copie o ID (geralmente um número negativo tipo `-1001234567890`)
-para `TELEGRAM_SOURCE_CHAT` no `.env`.
+Isso lista todos os seus chats com o ID e o nome de cada um.
+
+- **Se o grupo é permanente** (mesmo grupo/ID todo dia): copie o ID
+  (geralmente um número negativo tipo `-1001234567890`) para
+  `TELEGRAM_SOURCE_CHAT` no `.env`.
+- **Se o grupo é recriado periodicamente** (ex: um grupo novo por dia, com
+  link liberado após pagamento, nome tipo "Cansadão Apostas 31/08"): use só
+  o **prefixo fixo do nome** (ex: `Cansadão Apostas`, sem a data) em
+  `TELEGRAM_SOURCE_CHAT`. O listener resolve automaticamente pro grupo mais
+  recente com esse prefixo a cada execução (`_resolve_source_chat()` em
+  `listener.py`) — nada pra atualizar manualmente quando um grupo novo for
+  liberado, mesmo em produção via GitHub Actions.
 
 ## Instalação
 
@@ -185,6 +209,11 @@ cp .env.example .env
 Abra o `.env` e preencha, no mínimo:
 - `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_SOURCE_CHAT` (seção A acima)
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_CHAT_ID` (seção B acima)
+- `DATABASE_URL` — connection string do Postgres. Crie um projeto grátis em
+  **https://neon.tech**, crie um banco, e copie a "Connection string" do
+  painel (algo como `postgresql://usuario:senha@ep-xxx.neon.tech/dbname`).
+  Precisa estar preenchida mesmo pra rodar só localmente — `database.py`
+  não usa mais SQLite.
 
 Os demais campos já têm valores padrão sensatos. Vale revisar antes de usar
 de verdade:
@@ -194,12 +223,12 @@ de verdade:
   — **confirme manualmente** essas URLs no seu navegador (ver seção
   "Calibrando os adaptadores de casas de apostas").
 
-## Rodando o projeto
+## Rodando localmente
 
 Abra **dois terminais** (ambos com o venv ativado):
 
 ```bash
-# Terminal 1 — escuta o Telegram e processa as tips
+# Terminal 1 — escuta o Telegram em tempo real e processa as tips
 python listener.py
 ```
 
@@ -217,6 +246,16 @@ streamlit run app.py --server.address 0.0.0.0 --server.port 8501
 
 e compartilhe `http://SEU_IP_LOCAL:8501` com quem precisar (mesma rede Wi-Fi/LAN).
 
+Rodando localmente dessa forma, `listener.py` fica conectado 24/7 e processa
+cada tip assim que ela chega (sem o atraso de até 5 min do modo produção
+via cron — ver próxima seção). Você também precisa rodar `score_updater.py`
+à parte pra acompanhar placar/resultado ao vivo:
+
+```bash
+# Terminal 3 — acompanha placar/resultado ao vivo
+python score_updater.py
+```
+
 ### Testando sem esperar uma tip nova
 
 ```bash
@@ -226,6 +265,75 @@ python listener.py --backfill 20
 Isso reprocessa as últimas 20 mensagens do grupo, útil para validar o
 pipeline (extractor → matcher → banco → notificação) sem precisar aguardar
 alguém postar uma tip nova.
+
+## Deploy em produção (nuvem 100% gratuita)
+
+Em vez de manter sua máquina ligada 24/7, dá pra rodar tudo de graça na
+nuvem — com uma diferença de UX importante: novas tips e atualizações de
+placar chegam com até ~5 min de atraso (o intervalo do cron), em vez de
+instantaneamente como no modo local.
+
+**Por que funciona de graça:** o GitHub Actions cobra em minutos
+arredondados pra cima; num repositório **privado** o limite gratuito
+(2.000 min/mês) estoura numa cadência de 5 min. Em repositório **público**,
+Actions em runners padrão é **ilimitado e gratuito** — por isso este
+repositório precisa ser público pra essa arquitetura funcionar sem custo.
+Segredos continuam protegidos mesmo assim, via GitHub Actions Secrets
+(nunca ficam visíveis no código nem nos logs).
+
+### Peças da produção
+
+| Peça | Onde roda | O quê |
+|---|---|---|
+| Banco de dados | [Neon](https://neon.tech) (Postgres gratuito) | Substitui o SQLite local — persiste entre execuções efêmeras. |
+| `listener.py --poll-once` | GitHub Actions (`.github/workflows/poll-listener.yml`), cron a cada 5 min | Busca mensagens novas desde a última execução (rastreado no Postgres, tabela `sync_state`) e processa cada uma. |
+| `score_updater.py --once` | GitHub Actions (`.github/workflows/score-updater.yml`), cron a cada 5 min | Um ciclo de atualização de placar + retry de apostas não encontradas, e sai. |
+| `app.py` (dashboard) | [Streamlit Community Cloud](https://streamlit.io/cloud) | Lê do mesmo Postgres, sempre acessível pelo link público. |
+
+### Passo a passo
+
+1. **Neon**: crie a conta, um projeto, copie a connection string —
+   preencha `DATABASE_URL` no seu `.env` local e rode `python -c "from
+   database import init_db; init_db()"` uma vez pra criar as tabelas.
+
+2. **Sessão do Telegram para produção**: rode localmente
+   ```bash
+   python generate_session_string.py
+   ```
+   e guarde a string impressa (trate como senha).
+
+3. **Torne o repositório público** (Settings → General → Danger Zone →
+   Change visibility) — necessário pro cron de 5 min ser gratuito (ver
+   acima). Se preferir manter o código privado, dá pra rodar os workflows
+   mesmo assim, só que com uma cadência mais espaçada (ex: a cada 20-30 min)
+   pra caber no limite gratuito de repositório privado — ajuste o `cron` nos
+   dois arquivos em `.github/workflows/`.
+
+4. **Cadastre os secrets** do repositório (Settings → Secrets and variables
+   → Actions → New repository secret):
+   - `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_SESSION_STRING` (do passo 2), `TELEGRAM_SOURCE_CHAT`
+   - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_CHAT_ID`
+   - `DATABASE_URL` (do passo 1)
+   - `GEMINI_API_KEY` (recomendado trocar `OCR_ENGINE` pra `gemini` em
+     produção — ver [Calibrando o extractor](#calibrando-o-extractor-ocr);
+     já está assim por padrão no workflow `poll-listener.yml`)
+
+   E as variáveis não-secretas (aba "Variables", mesma tela), se quiser
+   customizar algo além do padrão: `BOOKMAKERS`, `SUPERBET_BASE_URL`,
+   `BETANO_BASE_URL`, `BETANO_TENNIS_PATH`, `BET365_BASE_URL`,
+   `BET365_TENNIS_PATH`, `TIMEZONE`.
+
+5. **Dispare os workflows manualmente uma vez** (aba Actions → escolha o
+   workflow → "Run workflow") pra validar antes de esperar o cron — confira
+   os logs da execução.
+
+6. **Publique o dashboard**: em [share.streamlit.io](https://share.streamlit.io),
+   conecte o repositório, aponte pra `app.py`, e em "Secrets" (painel do
+   app) cole:
+   ```toml
+   DATABASE_URL = "postgresql://usuario:senha@ep-xxx.neon.tech/dbname"
+   ```
+   O link público gerado é o que você compartilha com o grupo.
 
 ## Calibrando o extractor (OCR)
 
@@ -300,8 +408,10 @@ Como descobrir os seletores/paths reais de qualquer casa:
 
 Se o link exato não for encontrado (site bloqueado, seletor desatualizado,
 nomes não batem, CAPTCHA etc.), a aposta **não é perdida**: o botão daquela
-casa aparece com um 📍 (em vez de 🎯) apontando para a página do torneio/dia,
-e você pode reprocessar depois com `--backfill`.
+casa aponta para a página do torneio/dia em vez da partida específica (a
+notificação do Telegram, essa sim, ainda marca 🎯 exato / 📍 aproximado em
+cada botão). `score_updater.py` também retenta apostas que não acharam
+confronto nenhum a cada ciclo — ver [Deploy em produção](#deploy-em-produção-nuvem-100-gratuita).
 
 ## Scraping, stealth e Termos de Uso — leia isto
 
@@ -337,11 +447,17 @@ Pontos importantes:
   não se surpreenda se o link exato delas cair pro fallback na maioria das
   vezes. Isso foi documentado durante o desenvolvimento, não é um bug.
 - **Userbot (Telethon) usa sua conta pessoal do Telegram.** Isso é necessário
-  para ler grupos privados, mas significa que o arquivo de sessão
-  (`*.session`) tem acesso à sua conta — mantenha-o em local seguro e nunca o
-  compartilhe.
-- **EasyOCR** roda bem em CPU, mas é mais lento que APIs em nuvem; se o seu
-  grupo tem muitas tips por minuto e a extração ficar lenta, considere usar
-  `OCR_ENGINE=gemini`.
+  para ler grupos privados, mas significa que o arquivo de sessão local
+  (`*.session`) ou a `TELEGRAM_SESSION_STRING` (produção) têm acesso à sua
+  conta — mantenha-os em local seguro e nunca os compartilhe.
+- **Em produção (GitHub Actions), tips e placares chegam com até ~5 min de
+  atraso** — o cron não é instantâneo como a escuta local em tempo real.
+  Aceitável pra a maioria dos usos; se precisar de tempo real, rode
+  `listener.py`/`score_updater.py` localmente em vez do modo cron.
+- **EasyOCR** roda bem em CPU, mas baixa ~200MB de modelo a cada execução
+  do GitHub Actions (o runner é uma máquina nova a cada vez, sem cache) —
+  por isso o workflow de produção usa `OCR_ENGINE=gemini` por padrão
+  (mais leve, precisa só de uma chave grátis). Localmente, `easyocr`
+  continua sendo o padrão e funciona bem offline.
 - **Este projeto não faz apostas automaticamente** — ele apenas organiza a
   informação. Toda decisão de apostar é sua.

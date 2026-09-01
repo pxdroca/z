@@ -1,0 +1,43 @@
+name: Update live scores
+
+on:
+  schedule:
+    # A cada 5 min — mesmo raciocínio do workflow poll-listener.yml (só cabe
+    # de graça porque o repositório é público).
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  update-scores:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: playwright install --with-deps chromium
+
+      - name: Run one update cycle
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_CHAT_ID: ${{ secrets.TELEGRAM_BOT_CHAT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BOOKMAKERS: ${{ vars.BOOKMAKERS }}
+          SUPERBET_BASE_URL: ${{ vars.SUPERBET_BASE_URL }}
+          BETANO_BASE_URL: ${{ vars.BETANO_BASE_URL }}
+          BETANO_TENNIS_PATH: ${{ vars.BETANO_TENNIS_PATH }}
+          BET365_BASE_URL: ${{ vars.BET365_BASE_URL }}
+          BET365_TENNIS_PATH: ${{ vars.BET365_TENNIS_PATH }}
+          PLAYWRIGHT_HEADLESS: "true"
+          TIMEZONE: ${{ vars.TIMEZONE }}
+        run: python score_updater.py --once

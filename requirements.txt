@@ -18,8 +18,8 @@ Pillow==10.4.0
 # SDK novo e unificado do Google (o antigo "google-generativeai" está deprecated)
 google-genai==1.2.0
 
-# --- Banco de dados -------------------------------------------------------------
-# sqlite3 já vem na biblioteca padrão do Python — nada a instalar aqui.
+# --- Banco de dados (Postgres via Neon) ------------------------------------------
+psycopg[binary]==3.3.5
 
 # --- Descoberta do confronto oficial (sofascore_client.py) --------------------
 requests==2.32.3
@@ -31,7 +31,7 @@ rapidfuzz==3.9.7          # fuzzy-matching dos nomes dos tenistas
 beautifulsoup4==4.12.3
 
 # --- Dashboard web ---------------------------------------------------------------
-streamlit==1.38.0
+streamlit==1.40.2
 pandas==2.2.2
 
 # --- Utilidades gerais ------------------------------------------------------------

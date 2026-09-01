@@ -1,62 +1,71 @@
 """
 database.py
 ===========
-Camada de acesso ao SQLite. Único módulo que executa SQL — listener.py,
-app.py, matcher.py etc. só chamam estas funções.
+Camada de acesso ao Postgres (Neon). Único módulo que executa SQL —
+listener.py, app.py, matcher.py etc. só chamam estas funções.
 
-SQLite foi escolhido porque é gratuito, não precisa de servidor, e é lido
-tanto pelo processo do listener (que escreve) quanto pelo Streamlit (que lê),
-bastando compartilhar o arquivo .db. Usamos WAL mode para permitir leitura
-concorrente enquanto o listener grava.
+Postgres via Neon foi escolhido na migração pra nuvem gratuita porque
+persiste entre execuções (diferente de storage efêmero de PaaS grátis) e é
+acessível tanto pelos workflows do GitHub Actions (que escrevem) quanto pelo
+Streamlit Cloud (que lê) — bastando compartilhar a connection string
+(DATABASE_URL).
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Iterator, Optional
+
+import psycopg
+from psycopg.rows import dict_row
 
 from config import settings
 from models import Bet, BetStatus, ResultadoAposta
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = str(settings.resolve_path(settings.DB_PATH))
-
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS bets (
-    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    id                   SERIAL PRIMARY KEY,
     jogador1             TEXT NOT NULL,
     jogador2             TEXT NOT NULL,
     torneio              TEXT,
     mercado              TEXT,
     odd                  REAL,
-    data_hora            TEXT,                 -- ISO 8601, pode ser NULL até o matcher achar o jogo
-    links_json           TEXT DEFAULT '{}',    -- JSON: {slug: {"nome":..,"url":..,"exato":bool}} por casa de apostas
+    data_hora            TIMESTAMPTZ,           -- pode ser NULL até o matcher achar o jogo
+    links_json           TEXT DEFAULT '{}',     -- JSON: {slug: {"nome":..,"url":..,"exato":bool}} por casa de apostas
     status               TEXT NOT NULL DEFAULT 'nao_encontrada',
     fonte_texto          TEXT DEFAULT '',
-    mensagem_id          INTEGER UNIQUE,        -- id da msg do Telegram, evita processar 2x
-    criado_em            TEXT NOT NULL DEFAULT (datetime('now')),
-    sofascore_event_id   INTEGER,               -- usado por score_updater.py para acompanhar o placar
-    placar_final         TEXT,                  -- ex: "6-4, 6-3", preenchido quando a partida termina
-    vencedor_partida     TEXT,                  -- nome do jogador vencedor, preenchido junto com placar_final
-    unidades             REAL DEFAULT 1.0,      -- stake em unidades — fixo em 1.0 (tipster não indica stake)
+    mensagem_id          BIGINT UNIQUE,          -- id da msg do Telegram, evita processar 2x
+    criado_em            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sofascore_event_id   BIGINT,                 -- usado por score_updater.py para acompanhar o placar
+    placar_final         TEXT,                   -- ex: "6-4, 6-3", preenchido quando a partida termina
+    vencedor_partida     TEXT,                   -- nome do jogador vencedor, preenchido junto com placar_final
+    unidades             REAL DEFAULT 1.0,       -- stake em unidades — fixo em 1.0 (tipster não indica stake)
     resultado            TEXT DEFAULT 'pendente' -- se A APOSTA ganhou: pendente/green/red/void (manual, no painel)
 );
 
 CREATE INDEX IF NOT EXISTS idx_bets_status ON bets(status);
 CREATE INDEX IF NOT EXISTS idx_bets_data_hora ON bets(data_hora);
+
+-- Estado pequeno e persistente entre execuções do listener no GitHub
+-- Actions (o runner não tem disco persistente entre runs) — hoje só guarda
+-- o último message.id do Telegram já processado, pra saber de onde
+-- continuar o poll na próxima execução.
+CREATE TABLE IF NOT EXISTS sync_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
-# Colunas adicionadas depois da v1 do schema — para bancos .db já existentes
-# (criados antes desta mudança), _ensure_columns() faz o ALTER TABLE
-# idempotente na inicialização, já que CREATE TABLE IF NOT EXISTS não altera
-# uma tabela que já existe.
+# Colunas adicionadas depois da v1 do schema — para bancos já existentes,
+# _ensure_columns() faz o ALTER TABLE idempotente na inicialização, já que
+# CREATE TABLE IF NOT EXISTS não altera uma tabela que já existe.
 _EXTRA_COLUMNS = {
-    "sofascore_event_id": "INTEGER",
+    "sofascore_event_id": "BIGINT",
     "placar_final": "TEXT",
     "vencedor_partida": "TEXT",
     "unidades": "REAL DEFAULT 1.0",
@@ -64,8 +73,11 @@ _EXTRA_COLUMNS = {
 }
 
 
-def _ensure_columns(conn: sqlite3.Connection) -> None:
-    existentes = {row["name"] for row in conn.execute("PRAGMA table_info(bets)")}
+def _ensure_columns(conn: psycopg.Connection) -> None:
+    cur = conn.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'bets'"
+    )
+    existentes = {row["column_name"] for row in cur.fetchall()}
     for coluna, tipo in _EXTRA_COLUMNS.items():
         if coluna not in existentes:
             conn.execute(f"ALTER TABLE bets ADD COLUMN {coluna} {tipo}")
@@ -73,11 +85,8 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
 
 
 @contextmanager
-def get_connection() -> Iterator[sqlite3.Connection]:
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA foreign_keys=ON;")
+def get_connection() -> Iterator[psycopg.Connection]:
+    conn = psycopg.connect(settings.DATABASE_URL, row_factory=dict_row)
     try:
         yield conn
         conn.commit()
@@ -89,26 +98,16 @@ def get_connection() -> Iterator[sqlite3.Connection]:
 
 
 def init_db() -> None:
-    """Cria a tabela (idempotente). Chame uma vez no início de cada processo."""
+    """Cria as tabelas (idempotente). Chame uma vez no início de cada processo."""
     with get_connection() as conn:
-        conn.executescript(_SCHEMA)
+        conn.execute(_SCHEMA)
         _ensure_columns(conn)
-    logger.info("Banco de dados pronto em %s", DB_PATH)
+    logger.info("Banco de dados pronto (Postgres/Neon)")
 
 
-def _row_to_bet(row: sqlite3.Row) -> Bet:
-    data_hora = None
-    if row["data_hora"]:
-        try:
-            data_hora = datetime.fromisoformat(row["data_hora"])
-        except ValueError:
-            data_hora = None
-    criado_em = None
-    if row["criado_em"]:
-        try:
-            criado_em = datetime.fromisoformat(row["criado_em"])
-        except ValueError:
-            criado_em = None
+def _row_to_bet(row: dict) -> Bet:
+    data_hora = row["data_hora"]  # já vem como datetime (com tz) do psycopg
+    criado_em = row["criado_em"]
     try:
         links = json.loads(row["links_json"]) if row["links_json"] else {}
     except (json.JSONDecodeError, TypeError):
@@ -137,7 +136,7 @@ def _row_to_bet(row: sqlite3.Row) -> Bet:
 def bet_exists_for_message(mensagem_id: int) -> bool:
     """Evita reprocessar a mesma mensagem do Telegram (ex: se o listener reiniciar)."""
     with get_connection() as conn:
-        cur = conn.execute("SELECT 1 FROM bets WHERE mensagem_id = ?", (mensagem_id,))
+        cur = conn.execute("SELECT 1 FROM bets WHERE mensagem_id = %s", (mensagem_id,))
         return cur.fetchone() is not None
 
 
@@ -149,7 +148,8 @@ def insert_bet(bet: Bet) -> int:
             INSERT INTO bets (jogador1, jogador2, torneio, mercado, odd,
                                data_hora, links_json, status, fonte_texto, mensagem_id,
                                sofascore_event_id, unidades, resultado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
             """,
             (
                 bet.jogador1,
@@ -167,7 +167,7 @@ def insert_bet(bet: Bet) -> int:
                 bet.resultado,
             ),
         )
-        new_id = cur.lastrowid
+        new_id = cur.fetchone()["id"]
     logger.info("Aposta #%s salva: %s vs %s", new_id, bet.jogador1, bet.jogador2)
     return int(new_id)
 
@@ -176,7 +176,7 @@ def update_match_info(bet_id: int, data_hora: Optional[datetime], links: dict, s
     """Chamado pelo listener.py depois do matcher.py achar (ou não) o confronto e os links."""
     with get_connection() as conn:
         conn.execute(
-            "UPDATE bets SET data_hora = ?, links_json = ?, status = ? WHERE id = ?",
+            "UPDATE bets SET data_hora = %s, links_json = %s, status = %s WHERE id = %s",
             (data_hora.isoformat() if data_hora else None, json.dumps(links, ensure_ascii=False), status, bet_id),
         )
 
@@ -184,19 +184,19 @@ def update_match_info(bet_id: int, data_hora: Optional[datetime], links: dict, s
 def update_status(bet_id: int, status: str) -> None:
     """Usado pelo app.py quando o usuário marca uma aposta como encerrada/ganha/perdida etc."""
     with get_connection() as conn:
-        conn.execute("UPDATE bets SET status = ? WHERE id = ?", (status, bet_id))
+        conn.execute("UPDATE bets SET status = %s WHERE id = %s", (status, bet_id))
 
 
 def update_resultado(bet_id: int, resultado: str) -> None:
     """Usado pelo app.py quando o usuário marca se A APOSTA (não o jogo) ganhou —
     pendente/green/red/void. Independente de `status`, que é sobre o jogo."""
     with get_connection() as conn:
-        conn.execute("UPDATE bets SET resultado = ? WHERE id = ?", (resultado, bet_id))
+        conn.execute("UPDATE bets SET resultado = %s WHERE id = %s", (resultado, bet_id))
 
 
 def get_bet(bet_id: int) -> Optional[Bet]:
     with get_connection() as conn:
-        cur = conn.execute("SELECT * FROM bets WHERE id = ?", (bet_id,))
+        cur = conn.execute("SELECT * FROM bets WHERE id = %s", (bet_id,))
         row = cur.fetchone()
         return _row_to_bet(row) if row else None
 
@@ -221,15 +221,16 @@ def list_bets(
     params: list = []
 
     if status:
-        query += " AND status = ?"
+        query += " AND status = %s"
         params.append(status)
     if date_from:
-        query += " AND (data_hora IS NULL OR date(data_hora) >= date(?))"
+        query += " AND (data_hora IS NULL OR date(data_hora) >= date(%s))"
         params.append(date_from)
     if date_to:
-        query += " AND (data_hora IS NULL OR date(data_hora) <= date(?))"
+        query += " AND (data_hora IS NULL OR date(data_hora) <= date(%s))"
         params.append(date_to)
 
+    # order_by é sempre um literal fixo vindo do código (nunca input externo)
     query += f" ORDER BY {order_by}"
 
     with get_connection() as conn:
@@ -244,15 +245,20 @@ def auto_promote_ao_vivo() -> int:
     Marca como 'ao_vivo' toda aposta 'agendada' cujo horário já passou.
     Chamado periodicamente pelo app.py para manter o status atualizado
     sem depender de um worker separado.
+
+    TIMESTAMPTZ do Postgres é timezone-aware nativamente, então comparar
+    contra now() aqui não sofre do bug de fuso horário que existia com o
+    datetime('now') do SQLite (que era UTC, enquanto data_hora era salva em
+    hora local).
     """
     with get_connection() as conn:
         cur = conn.execute(
             """
             UPDATE bets
-               SET status = ?
-             WHERE status = ?
+               SET status = %s
+             WHERE status = %s
                AND data_hora IS NOT NULL
-               AND datetime(data_hora) <= datetime('now')
+               AND data_hora <= now()
             """,
             (BetStatus.AO_VIVO.value, BetStatus.AGENDADA.value),
         )
@@ -269,10 +275,28 @@ def list_trackable_bets() -> list[Bet]:
         cur = conn.execute(
             """
             SELECT * FROM bets
-             WHERE status IN (?, ?)
+             WHERE status IN (%s, %s)
                AND sofascore_event_id IS NOT NULL
             """,
             (BetStatus.AGENDADA.value, BetStatus.AO_VIVO.value),
+        )
+        rows = cur.fetchall()
+    return [_row_to_bet(r) for r in rows]
+
+
+def list_unmatched_bets() -> list[Bet]:
+    """
+    Apostas que não acharam o confronto oficial na primeira tentativa (ex:
+    o SofaScore ainda não tinha listado a partida quando a tip chegou).
+    Usado por score_updater.py para tentar de novo o matcher.py::find_match()
+    periodicamente — necessário desde que listener.py passou a rodar em
+    lote (polling) em vez de processar cada mensagem na hora: uma tentativa
+    falha não tem mais uma "próxima mensagem" natural que a reprocesse.
+    """
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT * FROM bets WHERE status = %s",
+            (BetStatus.NAO_ENCONTRADA.value,),
         )
         rows = cur.fetchall()
     return [_row_to_bet(r) for r in rows]
@@ -283,6 +307,27 @@ def update_score_result(bet_id: int, status: str, placar_final: Optional[str] = 
     e, quando a partida termina, gravar o placar final e o vencedor junto."""
     with get_connection() as conn:
         conn.execute(
-            "UPDATE bets SET status = ?, placar_final = ?, vencedor_partida = ? WHERE id = ?",
+            "UPDATE bets SET status = %s, placar_final = %s, vencedor_partida = %s WHERE id = %s",
             (status, placar_final, vencedor_partida, bet_id),
+        )
+
+
+def get_sync_state(key: str) -> Optional[str]:
+    """Lê um valor pequeno e persistente (ex: 'last_message_id') — usado pelo
+    listener.py no modo --poll-once, já que o runner do GitHub Actions não
+    tem disco persistente entre execuções."""
+    with get_connection() as conn:
+        cur = conn.execute("SELECT value FROM sync_state WHERE key = %s", (key,))
+        row = cur.fetchone()
+        return row["value"] if row else None
+
+
+def set_sync_state(key: str, value: str) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO sync_state (key, value) VALUES (%s, %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            """,
+            (key, value),
         )

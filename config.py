@@ -8,7 +8,7 @@ aqui.
 
 Uso:
     from config import settings
-    print(settings.DB_PATH)
+    print(settings.DATABASE_URL)
 """
 
 from __future__ import annotations
@@ -50,6 +50,10 @@ class Settings:
     TELEGRAM_SESSION_NAME: str = field(
         default_factory=lambda: os.getenv("TELEGRAM_SESSION_NAME", "tennis_monitor_session")
     )
+    # Sessão em produção (GitHub Actions): StringSession gerada uma vez,
+    # localmente, via generate_session_string.py. Se vazia, listener.py usa
+    # o arquivo .session local (TELEGRAM_SESSION_NAME) — modo de uso local.
+    TELEGRAM_SESSION_STRING: str = field(default_factory=lambda: os.getenv("TELEGRAM_SESSION_STRING", ""))
     TELEGRAM_SOURCE_CHAT: str = field(default_factory=lambda: os.getenv("TELEGRAM_SOURCE_CHAT", ""))
 
     # --- Telegram Bot API (notifier) ---
@@ -62,7 +66,10 @@ class Settings:
     GEMINI_MODEL: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
 
     # --- Banco de dados / mídia ---
-    DB_PATH: str = field(default_factory=lambda: os.getenv("DB_PATH", "data/apostas.db"))
+    # Connection string do Postgres (Neon) — usada tanto local quanto em
+    # produção (GitHub Actions + Streamlit Cloud). Obrigatória: database.py
+    # não tem mais fallback SQLite.
+    DATABASE_URL: str = field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
     MEDIA_DIR: str = field(default_factory=lambda: os.getenv("MEDIA_DIR", "media"))
 
     # --- Matcher: fonte do confronto oficial (SofaScore) ---
@@ -98,7 +105,7 @@ class Settings:
     TIMEZONE: str = field(default_factory=lambda: os.getenv("TIMEZONE", "America/Cuiaba"))
 
     def resolve_path(self, relative: str) -> Path:
-        """Resolve um caminho relativo (ex: DB_PATH) em relação à raiz do projeto."""
+        """Resolve um caminho relativo (ex: MEDIA_DIR) em relação à raiz do projeto."""
         p = Path(relative)
         return p if p.is_absolute() else (BASE_DIR / p)
 
@@ -107,4 +114,3 @@ settings = Settings()
 
 # Garante que as pastas usadas pelo projeto existam.
 settings.resolve_path(settings.MEDIA_DIR).mkdir(parents=True, exist_ok=True)
-settings.resolve_path(settings.DB_PATH).parent.mkdir(parents=True, exist_ok=True)

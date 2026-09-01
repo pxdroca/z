@@ -18,7 +18,13 @@ A cada ciclo:
        - "finished" -> grava placar_final + vencedor_partida, muda o status
          para "encerrada" e manda uma notificação avisando o resultado.
        - "notstarted" -> não faz nada (ainda não começou).
-  3. Espera um atraso aleatório entre cada partida consultada (mesmo espírito
+  3. Reconsulta o matcher.py para toda aposta com status "nao_encontrada"
+     (list_unmatched_bets, em database.py) — necessário desde que o
+     listener.py passou a rodar em lote (poll periódico, em vez de processar
+     cada mensagem instantaneamente): uma tip cujo jogo o SofaScore ainda não
+     tinha listado no momento do poll não tem mais uma "próxima mensagem"
+     natural que a reprocesse, então esse retry cobre esse caso.
+  4. Espera um atraso aleatório entre cada partida consultada (mesmo espírito
      "educado" dos outros módulos que batem no SofaScore/casas de apostas).
 
 Não decide se A APOSTA em si ganhou ou perdeu (isso depende do mercado
@@ -34,9 +40,11 @@ import logging
 import random
 import sys
 import time
+from datetime import datetime
 
 from config import settings
-from database import init_db, list_trackable_bets, update_score_result
+from database import init_db, list_trackable_bets, list_unmatched_bets, update_match_info, update_score_result
+from matcher import find_match
 from models import Bet, BetStatus
 from notifier import send_plain_message
 from sofascore_client import EventStatus, get_event_status
@@ -106,8 +114,22 @@ def _processar_bet(bet: Bet) -> None:
         logger.debug("Aposta #%s: sem mudança (status SofaScore=%s)", bet.id, evt.status)
 
 
+def _retentar_bet_nao_encontrada(bet: Bet) -> None:
+    """Reconsulta o matcher.py pra uma aposta que não achou o confronto na
+    primeira tentativa — ver docstring do módulo pra contexto."""
+    match = find_match(bet.jogador1, bet.jogador2)
+    if not match.encontrado:
+        logger.debug("Aposta #%s: ainda não encontrada (%s x %s)", bet.id, bet.jogador1, bet.jogador2)
+        return
+
+    status = BetStatus.AO_VIVO.value if (match.data_hora and match.data_hora <= datetime.now()) else BetStatus.AGENDADA.value
+    update_match_info(bet.id, data_hora=match.data_hora, links=match.links, status=status)
+    logger.info("Aposta #%s: confronto encontrado no retry — %s x %s", bet.id, bet.jogador1, bet.jogador2)
+
+
 def run_once() -> int:
-    """Roda um ciclo: consulta todas as apostas rastreáveis. Devolve quantas foram processadas."""
+    """Roda um ciclo: consulta todas as apostas rastreáveis e retenta as não
+    encontradas. Devolve quantas foram processadas no total."""
     apostas = list_trackable_bets()
     logger.info("Ciclo iniciado: %d aposta(s) para acompanhar.", len(apostas))
     for bet in apostas:
@@ -116,7 +138,18 @@ def run_once() -> int:
         except Exception:
             logger.exception("Erro ao processar aposta #%s (evento %s)", bet.id, bet.sofascore_event_id)
         _polite_delay()
-    return len(apostas)
+
+    nao_encontradas = list_unmatched_bets()
+    if nao_encontradas:
+        logger.info("Retentando %d aposta(s) não encontrada(s).", len(nao_encontradas))
+    for bet in nao_encontradas:
+        try:
+            _retentar_bet_nao_encontrada(bet)
+        except Exception:
+            logger.exception("Erro ao retentar aposta #%s (%s x %s)", bet.id, bet.jogador1, bet.jogador2)
+        _polite_delay()
+
+    return len(apostas) + len(nao_encontradas)
 
 
 def run_loop(interval_seconds: int) -> None:

@@ -1,0 +1,51 @@
+name: Poll Telegram listener
+
+on:
+  schedule:
+    # A cada 5 min — só é sustentável de graça porque este repositório é
+    # público (Actions em repositório privado tem limite mensal de minutos
+    # que essa cadência estouraria por causa do arredondamento de cobrança
+    # do GitHub pra minuto cheio).
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: playwright install --with-deps chromium
+
+      - name: Poll new messages
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_SESSION_STRING: ${{ secrets.TELEGRAM_SESSION_STRING }}
+          TELEGRAM_SOURCE_CHAT: ${{ secrets.TELEGRAM_SOURCE_CHAT }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_CHAT_ID: ${{ secrets.TELEGRAM_BOT_CHAT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OCR_ENGINE: gemini
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          BOOKMAKERS: ${{ vars.BOOKMAKERS }}
+          SUPERBET_BASE_URL: ${{ vars.SUPERBET_BASE_URL }}
+          BETANO_BASE_URL: ${{ vars.BETANO_BASE_URL }}
+          BETANO_TENNIS_PATH: ${{ vars.BETANO_TENNIS_PATH }}
+          BET365_BASE_URL: ${{ vars.BET365_BASE_URL }}
+          BET365_TENNIS_PATH: ${{ vars.BET365_TENNIS_PATH }}
+          PLAYWRIGHT_HEADLESS: "true"
+          TIMEZONE: ${{ vars.TIMEZONE }}
+        run: python listener.py --poll-once
