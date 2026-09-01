@@ -121,7 +121,13 @@
       "Bash(git branch *)",
       "Bash(git filter-branch --env-filter ' *)",
       "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --env-filter ' *)",
-      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --env-filter ' *)"
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --env-filter ' *)",
+      "Bash(git update-ref *)",
+      "Bash(git reflog *)",
+      "Bash(git gc *)",
+      "Bash(cmdkey /list)",
+      "Bash(python -c ' *)",
+      "Bash(git reset *)"
     ]
   }
 }

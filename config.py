@@ -112,5 +112,9 @@ class Settings:
 
 settings = Settings()
 
-# Garante que as pastas usadas pelo projeto existam.
+# Garante que as pastas usadas pelo projeto existam — importante também em
+# produção (GitHub Actions), onde o runner é uma checkout limpa a cada
+# execução e "logs/" não existe até alguém criar (listener.py/score_updater.py
+# esperam que já exista antes de configurar o FileHandler do logging).
 settings.resolve_path(settings.MEDIA_DIR).mkdir(parents=True, exist_ok=True)
+settings.resolve_path("logs").mkdir(parents=True, exist_ok=True)
