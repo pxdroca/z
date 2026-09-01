@@ -1,0 +1,22 @@
+# Secrets / env
+.env
+*.session
+*.session-journal
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Data / logs
+data/
+logs/
+*.log
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db

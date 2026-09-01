@@ -1,0 +1,39 @@
+# ==============================================================================
+# requirements.txt — Tennis Bet Monitor
+# 100% gratuito / open source. Instale com:
+#   pip install -r requirements.txt --break-system-packages   (se necessário no seu SO)
+# ==============================================================================
+
+# --- Telegram userbot (lê o grupo privado de tips) -----------------------------
+telethon==1.36.0
+
+# --- Telegram Bot API (envia a notificação privada) ----------------------------
+python-telegram-bot==21.6
+
+# --- OCR local, 100% gratuito (extractor.py) -----------------------------------
+easyocr==1.7.2
+Pillow==10.4.0
+
+# --- OCR alternativo via Gemini Free Tier (opcional, extractor.py) -------------
+# SDK novo e unificado do Google (o antigo "google-generativeai" está deprecated)
+google-genai==1.2.0
+
+# --- Banco de dados -------------------------------------------------------------
+# sqlite3 já vem na biblioteca padrão do Python — nada a instalar aqui.
+
+# --- Descoberta do confronto oficial (sofascore_client.py) --------------------
+requests==2.32.3
+
+# --- Adaptadores de casas de apostas (bookmakers/) -----------------------------
+playwright==1.47.0        # renderiza a página (sites são SPAs React/Next.js)
+tf-playwright-stealth==1.2.0  # disfarça o navegador headless (best-effort, não é infalível)
+rapidfuzz==3.9.7          # fuzzy-matching dos nomes dos tenistas
+beautifulsoup4==4.12.3
+
+# --- Dashboard web ---------------------------------------------------------------
+streamlit==1.38.0
+pandas==2.2.2
+
+# --- Utilidades gerais ------------------------------------------------------------
+python-dotenv==1.0.1
+unidecode==1.3.8          # normaliza acentos ao comparar nomes de jogadores
