@@ -1,7 +1,12 @@
 # Secrets / env
 .env
+.env.example
 *.session
 *.session-journal
+
+# Metadados internos do Claude Code (histórico de permissões, tarefas
+# agendadas etc.) — nunca deve ir para um repositório público.
+.claude/
 
 # Python
 __pycache__/
