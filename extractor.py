@@ -79,10 +79,21 @@ exato:
   "tipo_aposta": "simples" ou "multipla",
 
   // Preencha isto SE tipo_aposta == "simples" (senão deixe tudo null):
-  "jogador1": "nome do primeiro tenista (ou null se não achar)",
-  "jogador2": "nome do segundo tenista (ou null se não achar)",
+  // "jogador2" pode ficar null mesmo em tipo_aposta="simples" — é comum o
+  // tipster citar só o favorito (ex: "Hurkacz odd: 2.85"), sem o
+  // adversário; jogador1 nesse caso é o único nome citado.
+  "jogador1": "nome do primeiro tenista, ou o único citado (ou null se não achar nenhum)",
+  "jogador2": "nome do segundo tenista (ou null se só um foi citado, ou se não achar)",
   "torneio": "nome do torneio/circuito, ex: 'ATP Us Open' (ou null)",
-  "mercado": "mercado da aposta, ex: 'Vencedor da partida', 'Over 22.5 games' (ou null)",
+  // mercado: qualquer mercado de aposta de tênis, ex: "Vencedor da
+  // partida", "Vencedor do 2º set", "Over 22.5 games", "Total de aces
+  // mais de 8.5", "Dupla falta", "Vencer sem perder set", "Placar exato
+  // 2-0", "Tie-break", "Handicap de games -3.5" etc — extraia o mercado
+  // como ele aparece no print/legenda, não se limite aos exemplos acima.
+  // Se só o nome do jogador + a odd forem citados, sem mercado explícito
+  // (ex: "Hurkacz odd: 2.85"), assuma "Vencedor da partida" (é o mercado
+  // implícito mais comum nesse caso).
+  "mercado": "mercado da aposta (ou null só se genuinamente não der pra inferir)",
 
   // Preencha isto SE tipo_aposta == "multipla" (senão deixe null/[]):
   // "selecoes": só o jogador FAVORECIDO de cada perna (quem a aposta diz que
@@ -170,6 +181,13 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
             confianca=0.7 if (odd is not None and selecoes) else 0.4,
         )
 
+    if data.get("jogador1") and data.get("jogador2"):
+        confianca = 0.9
+    elif data.get("jogador1"):  # só o favorito, sem adversário — ainda válido, ver models.ExtractedBet.valido
+        confianca = 0.6
+    else:
+        confianca = 0.3
+
     bet = ExtractedBet(
         jogador1=data.get("jogador1"),
         jogador2=data.get("jogador2"),
@@ -177,7 +195,7 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
         mercado=data.get("mercado"),
         odd=odd,
         texto_bruto=caption_text,
-        confianca=0.9 if data.get("jogador1") and data.get("jogador2") else 0.3,
+        confianca=confianca,
     )
     return bet
 
@@ -256,11 +274,27 @@ _ODD_PATTERNS = [
 
 _TOURNAMENT_KEYWORDS = re.compile(r"\b(ATP|WTA|ITF|CHALLENGER|GRAND SLAM|MASTERS 1000|WTA 125)\b[^\n]*", re.IGNORECASE)
 
+# O qualificador final exclui explicitamente "odd"/"@"/"cota" (não usa
+# [^\n]* genérico) — sem isso, numa linha tipo "vencer um set odd: 1.85" o
+# mercado capturado engolia a palavra "odd" junto, e o texto "restante"
+# usado por find_favorite_only (ver parse_free_text) perdia o marcador que
+# ele precisa pra reconhecer a odd, quebrando a extração do jogador.
 _MARKET_KEYWORDS = re.compile(
     r"\b(vencedor(?: do jogo| da partida)?|match winner|handicap de games?|"
-    r"total de games?|over\/?under|over \d|under \d|"
-    r"vencedor do \d\ºset|vence(?:r)? o (?:1|2|3)[ºo]?\s*set|"
-    r"vencedor do set \d)\b[^\n]*",
+    r"total de games?|over\/?under|over \d+[.,]?\d*|under \d+[.,]?\d*|"
+    # "vencer o 2º set" / "vencer o 2 set" / "vencer 2 set" / "vencer um set"
+    # (genérico, sem número — ex: apostado antes do jogo começar, cobre
+    # qualquer set) / "vencer o primeiro/segundo/terceiro set" (por extenso).
+    r"vence(?:r)? (?:o |a )?(?:1|2|3|um|uma|primeiro|segundo|terceiro)[ºoa]?\s*set|"
+    r"vencedor do \d\ºset|vencedor do set \d|"
+    r"total de aces?|aces? (?:mais|menos) de \d+[.,]?\d*|"
+    r"dupla falta|duplas? faltas?|"
+    r"(?:mais|menos) de \d+[.,]?\d* games?|"
+    r"placar exato|resultado exato|"
+    r"vence(?:r)? sem perder set(?:s)?|vence(?:r)? sem perder \d\s*sets?|"
+    r"vence(?:r)? com \d\s*sets?|"
+    r"vencedor por \d\s*x\s*\d|"
+    r"tie[\s\-]?break)\b(?:(?!odd\b|@|cota\b)[^\n:])*",
     re.IGNORECASE,
 )
 
@@ -348,12 +382,6 @@ def parse_free_text(texto: str) -> ExtractedBet:
     if jogador1 is None or jogador2 is None:
         jogador1, jogador2 = _find_players_in_card_line(texto)
 
-    # Último recurso: só o nome do favorito, sem adversário (ver
-    # find_favorite_only) — o adversário é resolvido depois pelo matcher.py
-    # consultando o SofaScore (find_canonical_match_by_name).
-    if jogador1 is None and jogador2 is None:
-        jogador1 = find_favorite_only(texto)
-
     for campo, pattern in _LABELLED_PATTERNS.items():
         m = pattern.search(texto)
         if m:
@@ -375,13 +403,33 @@ def parse_free_text(texto: str) -> ExtractedBet:
                     torneio = torneio.split(sep, 1)[0].strip()
                     break
 
+    # O mercado (ex: "vencer o 2º set") precisa ser identificado ANTES de
+    # tentar achar "só o favorito" (find_favorite_only): sem isso, um texto
+    # como "Petkovic vencer um set odd: 1.85" faz o regex de nome-perto-da-
+    # odd capturar "vencer um set" em vez de "Petkovic" — bug real visto em
+    # produção. Removendo o trecho do mercado do texto antes de buscar o
+    # nome, sobra só "Petkovic odd: 1.85" pro find_favorite_only.
+    texto_sem_mercado = texto
     if mercado is None:
         m = _MARKET_KEYWORDS.search(texto)
         if m:
             mercado = m.group(0).strip()
+            texto_sem_mercado = texto[: m.start()] + texto[m.end() :]
+
+    # Último recurso: só o nome do favorito, sem adversário (ver
+    # find_favorite_only) — o adversário é resolvido depois pelo matcher.py
+    # consultando o SofaScore (find_canonical_match_by_name).
+    if jogador1 is None and jogador2 is None:
+        jogador1 = find_favorite_only(texto_sem_mercado)
 
     if mercado is None:
         mercado = _infer_market_from_favorite(texto, jogador1, jogador2)
+
+    # Só o favorito citado, sem mercado explícito nem adversário — ex:
+    # "Hurkacz odd: 2.85". Assume o mercado implícito mais comum: esse
+    # jogador vencer a partida.
+    if mercado is None and jogador1 and not jogador2:
+        mercado = f"{jogador1} vencer a partida"
 
     for pattern in _ODD_PATTERNS:
         m = pattern.search(texto)
