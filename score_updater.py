@@ -41,12 +41,14 @@ import random
 import sys
 import time
 from datetime import datetime
+from typing import Optional
 
 from config import settings
 from database import init_db, list_trackable_bets, list_unmatched_bets, update_match_info, update_score_result
 from matcher import find_match
 from models import Bet, BetStatus
 from notifier import send_plain_message
+from scores365_client import find_status_by_names
 from sofascore_client import EventStatus, get_event_status
 
 if sys.platform == "win32":
@@ -82,11 +84,44 @@ def _vencedor_nome(bet: Bet, evt: EventStatus) -> str | None:
     return None
 
 
-def _processar_bet(bet: Bet) -> None:
+def _consultar_status(bet: Bet) -> Optional[EventStatus]:
+    """
+    SofaScore é a fonte primária (mesmo event_id salvo desde o matcher.py).
+    Se falhar, tenta 365scores como fallback, buscando por nome dos
+    jogadores — ver scores365_client.py para o motivo (SofaScore às vezes
+    bloqueia TODO o IP do runner do GitHub Actions com 403, não só um
+    request pontual, e o retry de sofascore_client não ajuda nesse caso
+    porque o IP continua o mesmo).
+    """
     evt = get_event_status(bet.sofascore_event_id)
+    if evt is not None:
+        return evt
+
+    logger.warning("Aposta #%s: SofaScore falhou (evento %s), tentando 365scores.", bet.id, bet.sofascore_event_id)
+    try:
+        evt = find_status_by_names(bet.jogador1, bet.jogador2, threshold=settings.SUPERBET_FUZZY_THRESHOLD)
+    except Exception:
+        logger.exception("Aposta #%s: 365scores também falhou.", bet.id)
+        return None
+    if evt is not None:
+        logger.info("Aposta #%s: status obtido via 365scores (fallback).", bet.id)
+    return evt
+
+
+def _processar_bet(bet: Bet) -> Optional[str]:
+    """Devolve o texto de notificação a enviar (partida encerrada), ou None
+    se não há nada a notificar. Não envia a notificação aqui — ver run_once,
+    que acumula os textos de todo o ciclo e manda todos juntos num único
+    asyncio.run() (chamar asyncio.run() uma vez por partida, dentro deste
+    loop síncrono, esgotava o pool de conexões HTTP do bot do Telegram —
+    _get_bot() em notifier.py cacheia o Bot/httpx.AsyncClient entre
+    chamadas, e cada asyncio.run() novo cria um event loop novo, incompatível
+    com um client já vinculado ao loop anterior — bug real visto em
+    produção: TimedOut/PoolTimeout ao notificar mais de 1 partida por ciclo)."""
+    evt = _consultar_status(bet)
     if evt is None:
-        logger.warning("Aposta #%s: falha ao consultar evento %s, tentando de novo no próximo ciclo.", bet.id, bet.sofascore_event_id)
-        return
+        logger.warning("Aposta #%s: falha ao consultar evento %s (SofaScore e 365scores), tentando de novo no próximo ciclo.", bet.id, bet.sofascore_event_id)
+        return None
 
     if evt.status == "finished":
         vencedor = _vencedor_nome(bet, evt)
@@ -99,12 +134,11 @@ def _processar_bet(bet: Bet) -> None:
         logger.info("Aposta #%s: partida encerrada — %s venceu %s", bet.id, vencedor, evt.placar)
 
         odd_txt = f"{bet.odd:.2f}" if bet.odd is not None else "?"
-        texto = (
+        return (
             f"🏁 Partida encerrada: {vencedor or '?'} venceu {evt.placar or '(placar indisponível)'} — "
             f"não esqueça de conferir se sua aposta ({bet.mercado or 'mercado não identificado'}, "
             f"odd {odd_txt}) bateu."
         )
-        asyncio.run(send_plain_message(texto))
 
     elif evt.status == "inprogress" and bet.status == BetStatus.AGENDADA.value:
         update_score_result(bet.id, status=BetStatus.AO_VIVO.value)
@@ -112,12 +146,27 @@ def _processar_bet(bet: Bet) -> None:
 
     else:
         logger.debug("Aposta #%s: sem mudança (status SofaScore=%s)", bet.id, evt.status)
+    return None
+
+
+async def _enviar_notificacoes(textos: list[str]) -> None:
+    for texto in textos:
+        await send_plain_message(texto)
 
 
 def _retentar_bet_nao_encontrada(bet: Bet) -> None:
     """Reconsulta o matcher.py pra uma aposta que não achou o confronto na
-    primeira tentativa — ver docstring do módulo pra contexto."""
-    match = find_match(bet.jogador1, bet.jogador2)
+    primeira tentativa — ver docstring do módulo pra contexto.
+
+    bet.jogador2 == "?" é o placeholder que listener.py salva quando só o
+    favorito foi citado e o SofaScore não confirmou o adversário na 1ª
+    tentativa (ver listener.py, jogador2 NOT NULL no banco) — precisa virar
+    None aqui, senão find_match tentaria achar um confronto contra um
+    jogador literal chamado "?" (bug real: "?" é truthy em Python, então
+    `if jogador2:` em matcher.find_match não detectava o placeholder e
+    nunca reencaminhava pra find_canonical_match_by_name)."""
+    jogador2 = bet.jogador2 if bet.jogador2 != "?" else None
+    match = find_match(bet.jogador1, jogador2)
     if not match.encontrado:
         logger.debug("Aposta #%s: ainda não encontrada (%s x %s)", bet.id, bet.jogador1, bet.jogador2)
         return
@@ -132,12 +181,18 @@ def run_once() -> int:
     encontradas. Devolve quantas foram processadas no total."""
     apostas = list_trackable_bets()
     logger.info("Ciclo iniciado: %d aposta(s) para acompanhar.", len(apostas))
+    notificacoes: list[str] = []
     for bet in apostas:
         try:
-            _processar_bet(bet)
+            texto = _processar_bet(bet)
+            if texto:
+                notificacoes.append(texto)
         except Exception:
             logger.exception("Erro ao processar aposta #%s (evento %s)", bet.id, bet.sofascore_event_id)
         _polite_delay()
+
+    if notificacoes:
+        asyncio.run(_enviar_notificacoes(notificacoes))
 
     nao_encontradas = list_unmatched_bets()
     if nao_encontradas:
