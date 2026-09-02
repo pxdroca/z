@@ -184,9 +184,20 @@ def _inject_css() -> None:
         /* ---------------------------------------------------------------
            Header nativa do Streamlit (barra vazia com Deploy/menu ⋮) —
            some por completo; o app tem seu próprio cabeçalho (.app-header).
+           Idem para a badge "Manage app"/perfil do Streamlit Cloud
+           (canto inferior direito) e o menu de 3 pontos (⋮) do topo — só
+           aparecem pra quem é dono do app, nunca pros visitantes, mas
+           também não têm função nenhuma pro uso deste painel.
         --------------------------------------------------------------- */
-        header[data-testid="stHeader"] {
-            display: none;
+        header[data-testid="stHeader"],
+        div[data-testid="stToolbar"],
+        div[data-testid="stDecoration"],
+        div[data-testid="stStatusWidget"],
+        #MainMenu,
+        footer,
+        .stAppDeployButton,
+        [data-testid="stAppViewerBadge"] {
+            display: none !important;
         }
         div[data-testid="stAppViewContainer"] > div:first-child {
             padding-top: 1.5rem;
@@ -468,6 +479,44 @@ def _inject_css() -> None:
         }
 
         /* ---------------------------------------------------------------
+           Grid de métricas do topo (Total, Green, Red, Odd média etc) —
+           HTML/CSS puro (não st.columns/st.metric) pra controlar quantas
+           colunas cabem também no mobile (ver _metrics_grid() e o media
+           query abaixo, que reduz de 5 pra 3 colunas em telas estreitas
+           em vez de empilhar 1 métrica por linha).
+        --------------------------------------------------------------- */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 0.9rem 0.6rem;
+            margin-bottom: 0.6rem;
+        }
+        .metric-cell { min-width: 0; }
+        .metric-label {
+            font-family: 'Work Sans', sans-serif;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-size: 0.68rem;
+            letter-spacing: 0.04em;
+            margin-bottom: 0.1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .metric-valor {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 1.3rem;
+            line-height: 1.15;
+        }
+        .metric-delta {
+            font-family: 'Work Sans', sans-serif;
+            font-size: 0.72rem;
+            color: var(--muted);
+            margin-top: 0.1rem;
+        }
+
+        /* ---------------------------------------------------------------
            Responsividade mobile: reduz padding/fonte e força qualquer
            bloco horizontal nativo do Streamlit (ex: grupos de botões) a
            empilhar em vez de espremer.
@@ -478,6 +527,12 @@ def _inject_css() -> None:
             .bet-card { padding: 0.85rem 0.9rem; }
             .bet-card .jogo { font-size: 1.08rem; }
             .bet-card .info-row { gap: 1rem; }
+
+            .metrics-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 0.7rem 0.5rem;
+            }
+            .metric-valor { font-size: 1.05rem; }
 
             div[data-testid="stHorizontalBlock"]:not([class*="editor_"] *) {
                 flex-direction: column !important;
@@ -674,6 +729,28 @@ def _bet_card(bet: Bet) -> None:
         st.rerun()
 
 
+def _metrics_grid(itens: list[tuple[str, str, str | None]]) -> None:
+    """
+    Grid de métricas em HTML/CSS puro (não st.columns/st.metric) — no
+    desktop fica em linha(s) de várias colunas, mas no mobile também usa um
+    grid compacto (3 colunas) em vez de empilhar 1 métrica por linha, que é
+    o comportamento padrão de st.columns em telas estreitas e deixava o
+    topo do painel comprido demais (muito scroll até o primeiro jogo).
+    Cada item é (label, valor, delta_opcional).
+    """
+    celulas = []
+    for label, valor, delta in itens:
+        delta_html = f'<div class="metric-delta">{delta}</div>' if delta else ""
+        celulas.append(
+            f'<div class="metric-cell">'
+            f'<div class="metric-label">{label}</div>'
+            f'<div class="metric-valor">{valor}</div>'
+            f"{delta_html}"
+            f"</div>"
+        )
+    st.markdown(f'<div class="metrics-grid">{"".join(celulas)}</div>', unsafe_allow_html=True)
+
+
 def main() -> None:
     _inject_css()
 
@@ -700,29 +777,27 @@ def main() -> None:
         apostas_unicas, key=lambda b: b.data_hora or datetime.max
     )
 
-    linha1 = st.columns(3)
-    linha1[0].metric("Total no filtro", len(apostas_ordenadas))
-    linha1[1].metric("Ao vivo agora", sum(1 for b in apostas_ordenadas if b.status == BetStatus.AO_VIVO.value))
-    linha1[2].metric(
-        "Odd média",
-        f"{(sum(b.odd for b in apostas_ordenadas if b.odd) / max(1, sum(1 for b in apostas_ordenadas if b.odd))):.2f}"
-        if any(b.odd for b in apostas_ordenadas) else "—",
-    )
-
     stats = _calcular_estatisticas(apostas_ordenadas)
-    linha2 = st.columns(6)
-    linha2[0].metric("✅ Green", stats["green"])
-    linha2[1].metric("❌ Red", stats["red"])
-    linha2[2].metric("➖ Void", stats["void"])
-    linha2[3].metric("⏳ Pendente", stats["pendente"])
-    linha2[4].metric(
-        "Taxa de acerto",
-        f"{stats['taxa_acerto']:.1f}%" if stats["taxa_acerto"] is not None else "—",
+    odd_media = (
+        f"{(sum(b.odd for b in apostas_ordenadas if b.odd) / max(1, sum(1 for b in apostas_ordenadas if b.odd))):.2f}"
+        if any(b.odd for b in apostas_ordenadas) else "—"
     )
-    linha2[5].metric(
-        "Unidades (líquido)",
-        f"{stats['unidades_liquidas']:+.2f}",
-        delta=f"ROI {stats['roi']:.1f}%" if stats["roi"] is not None else None,
+    _metrics_grid(
+        [
+            ("Total no filtro", str(len(apostas_ordenadas)), None),
+            ("Ao vivo agora", str(sum(1 for b in apostas_ordenadas if b.status == BetStatus.AO_VIVO.value)), None),
+            ("Odd média", odd_media, None),
+            ("✅ Green", str(stats["green"]), None),
+            ("❌ Red", str(stats["red"]), None),
+            ("➖ Void", str(stats["void"]), None),
+            ("⏳ Pendente", str(stats["pendente"]), None),
+            ("Taxa de acerto", f"{stats['taxa_acerto']:.1f}%" if stats["taxa_acerto"] is not None else "—", None),
+            (
+                "Unidades (líquido)",
+                f"{stats['unidades_liquidas']:+.2f}",
+                f"ROI {stats['roi']:.1f}%" if stats["roi"] is not None else None,
+            ),
+        ]
     )
 
     st.divider()
