@@ -119,9 +119,9 @@ def _formata_placar_por_linha(evt: EventStatus) -> str:
 
 def _resultado_emoji(resultado: Optional[str]) -> str:
     if resultado == ResultadoAposta.GREEN.value:
-        return "✅ Green (bateu)"
+        return "✅"
     if resultado == ResultadoAposta.RED.value:
-        return "❌ Red (não bateu)"
+        return "❌"
     return "⏳ Confira manualmente (mercado não reconhecido automaticamente)"
 
 
