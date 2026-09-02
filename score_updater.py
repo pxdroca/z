@@ -144,9 +144,18 @@ def _processar_bet(bet: Bet, evt: EventStatus) -> None:
             bet.id, vencedor, evt.placar, resultado or "não determinado",
         )
 
-    elif evt.status == "inprogress" and bet.status == BetStatus.AGENDADA.value:
-        update_score_result(bet.id, status=BetStatus.AO_VIVO.value)
-        logger.info("Aposta #%s: partida começou (ao vivo). Placar parcial: %s", bet.id, evt.placar)
+    elif evt.status == "inprogress":
+        # Placar parcial (reaproveita a coluna placar_final — quando o jogo
+        # ainda está rolando, ela guarda "o placar mais recente conhecido",
+        # não necessariamente o final; ver Bet.placar_final/app.py, que só
+        # mostra "🏆 X venceu" quando status == encerrada) atualizado a
+        # cada ciclo enquanto a partida estiver ao vivo, não só na primeira
+        # vez que sai de "agendada" — script_updater.py roda a cada ~poucos
+        # minutos, então o placar do app.py nunca fica muito desatualizado.
+        novo_status = BetStatus.AO_VIVO.value
+        if bet.status == BetStatus.AGENDADA.value:
+            logger.info("Aposta #%s: partida começou (ao vivo).", bet.id)
+        update_score_result(bet.id, status=novo_status, placar_final=evt.placar)
 
     else:
         logger.debug("Aposta #%s: sem mudança (status SofaScore=%s)", bet.id, evt.status)

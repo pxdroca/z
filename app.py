@@ -265,10 +265,15 @@ def _inject_css() -> None:
         .bet-card {
             background: var(--card-bg);
             border: 1px solid var(--card-border);
-            border-bottom: none;
-            border-radius: 16px 16px 0 0;
+            border-radius: 16px;
             padding: 1.1rem 1.3rem;
             box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+        }
+        /* Quando o editor está aberto embaixo (ver .st-key-editor_), o
+           card perde o arredondado/borda inferior pra "colar" nele. */
+        .bet-card.com-editor-aberto {
+            border-bottom: none;
+            border-radius: 16px 16px 0 0;
         }
 
         .bet-card .card-header-row {
@@ -348,6 +353,17 @@ def _inject_css() -> None:
             font-weight: 700;
         }
 
+        /* Placar parcial ao vivo — canto inferior direito dos badges de
+           status (pedido do usuário), sem o "venceu" (a partida ainda não
+           acabou). Cor neutra pra não competir visualmente com o badge
+           vermelho "Ao vivo" logo acima. */
+        .bet-card .placar-ao-vivo {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+
         .bet-card .badges-row {
             display: flex;
             flex-direction: column;
@@ -355,6 +371,9 @@ def _inject_css() -> None:
             flex-wrap: wrap;
             gap: 0.35rem;
             flex-shrink: 0;
+            /* Espaço reservado pro botão de lápis sobreposto (ver
+               st-key-card_ abaixo) não colidir com os badges. */
+            padding-right: 1.8rem;
         }
 
         .status-badge, .resultado-badge {
@@ -378,6 +397,46 @@ def _inject_css() -> None:
         .resultado-pendente { background: rgba(215,242,77,0.14); color: var(--lime); }
 
         /* ---------------------------------------------------------------
+           Wrapper do card inteiro (HTML do card + botão de lápis + editor
+           quando aberto) — position:relative pra poder sobrepor o botão
+           de lápis por cima do canto superior direito do card via CSS
+           absoluto, já que ele não pode ir "dentro" do bloco de HTML puro
+           (card_html é st.markdown; um st.button real não entra nele).
+        --------------------------------------------------------------- */
+        div[class*="st-key-card_"] {
+            position: relative;
+            margin-bottom: 0.9rem;
+        }
+        /* O pai imediato do stButton (stElementContainer) também é
+           position:relative por padrão do próprio Streamlit — isso faz o
+           position:absolute do botão ficar preso dentro dele (que só tem
+           a altura do botão), em vez de posicionar relativo ao card
+           inteiro. "static" nele deixa o absolute do botão "atravessar"
+           até o ancestral maior de verdade (o card, via st-key-card_). */
+        div[class*="st-key-card_"] > div[data-testid="stElementContainer"]:has([data-testid="stButton"]) {
+            position: static;
+        }
+        div[class*="st-key-card_"] [data-testid="stButton"] {
+            position: absolute;
+            top: 1.1rem;
+            right: 1.3rem;
+            width: auto !important;
+            left: auto !important;
+        }
+        div[class*="st-key-card_"] [data-testid="stButton"] button {
+            background: transparent !important;
+            border: none !important;
+            color: var(--muted) !important;
+            font-size: 0.95rem !important;
+            padding: 0.1rem 0.3rem !important;
+            min-height: 0 !important;
+            line-height: 1 !important;
+        }
+        div[class*="st-key-card_"] [data-testid="stButton"] button:hover {
+            color: var(--lime) !important;
+        }
+
+        /* ---------------------------------------------------------------
            Editor de status/resultado — visualmente "colado" na base do
            card acima (mesmo fundo, sem borda entre os dois, cantos
            inferiores arredondados só aqui) em vez de dois selects nativos
@@ -389,7 +448,7 @@ def _inject_css() -> None:
             border-top: 1px solid rgba(255,255,255,0.06);
             border-radius: 0 0 16px 16px;
             padding: 0.5rem 0.9rem 0.7rem;
-            margin-bottom: 0.9rem;
+            margin-top: -0.9rem;
         }
         /* Força as duas colunas lado a lado mesmo no mobile — o Streamlit
            dá min-width:calc(100% - 24px) pras colunas em telas estreitas
@@ -411,19 +470,6 @@ def _inject_css() -> None:
             border-color: var(--card-border) !important;
             border-radius: 8px !important;
             font-size: 0.78rem !important;
-        }
-        /* Botão de lápis — discreto, texto pequeno, sem destaque de cor
-           (não é uma ação "principal" como os botões das casas de apostas). */
-        div[class*="st-key-editor_"] [data-testid="stButton"] button {
-            background: transparent !important;
-            border: none !important;
-            color: var(--muted) !important;
-            font-size: 0.78rem !important;
-            font-weight: 600 !important;
-            padding: 0.15rem 0 !important;
-        }
-        div[class*="st-key-editor_"] [data-testid="stButton"] button:hover {
-            color: var(--lime) !important;
         }
 
         /* ---------------------------------------------------------------
@@ -725,8 +771,13 @@ def _bet_card(bet: Bet) -> None:
     odd_txt = f"{bet.odd:.2f}" if bet.odd is not None else "—"
     data_txt = bet.data_hora.strftime("%d/%m %H:%M") if bet.data_hora else "não encontrada"
 
+    # placar_final guarda "o placar mais recente conhecido" (ver
+    # score_updater.py::_processar_bet) — quando a partida já encerrou,
+    # mostra o resultado final ("🏆 X venceu"); enquanto ainda está ao
+    # vivo, mostra como placar parcial (sem "venceu", já que ninguém
+    # venceu ainda).
     placar_html = ""
-    if bet.placar_final:
+    if bet.placar_final and bet.status == BetStatus.ENCERRADA.value:
         placar_html = (
             f'<div class="placar-final">🏆 {bet.vencedor_partida or "?"} venceu '
             f'<span class="placar-numeros">{bet.placar_final}</span></div>'
@@ -760,13 +811,22 @@ def _bet_card(bet: Bet) -> None:
     editando_key = f"editando_{bet.id}"
     editando = st.session_state.get(editando_key, False)
 
+    # Placar parcial ao vivo (canto inferior direito, abaixo dos badges de
+    # status — pedido do usuário) — só quando a partida está rolando de
+    # verdade (status ao_vivo) e o SofaScore já reportou algum set jogado.
+    placar_ao_vivo_html = ""
+    if bet.status == BetStatus.AO_VIVO.value and bet.placar_final:
+        placar_ao_vivo_html = f'<div class="placar-ao-vivo">{bet.placar_final}</div>'
+
+    card_classe = "bet-card com-editor-aberto" if editando else "bet-card"
     card_html = (
-        f'<div class="bet-card">'
+        f'<div class="{card_classe}">'
         f'<div class="card-header-row">'
         f'<div class="jogo">{bet.jogo}</div>'
         f'<div class="badges-row">'
         f'<span class="status-badge {status_badge_class}">{status_label}</span>'
         f'<span class="resultado-badge {resultado_badge_class}">{resultado_label}</span>'
+        f'{placar_ao_vivo_html}'
         f'</div>'
         f'</div>'
         f'<div class="torneio">{bet.torneio or "Torneio não identificado"}</div>'
@@ -781,47 +841,53 @@ def _bet_card(bet: Bet) -> None:
         f'{links_html}'
         f'</div>'
     )
-    st.markdown(card_html, unsafe_allow_html=True)
 
-    # Botão de lápis (mais minimalista que os dois selects sempre visíveis
-    # embaixo do card — pedido do usuário): clique alterna um estado em
-    # session_state que revela os dois selectbox só quando necessário.
-    with st.container(key=f"editor_{bet.id}"):
+    # O botão de lápis precisa ficar visualmente ao lado dos badges de
+    # status (canto superior direito do card, pedido do usuário) — como o
+    # card em si é HTML puro (st.markdown, pra controlar quebra de linha
+    # do mercado), um st.button real não pode ir "dentro" desse HTML.
+    # Solução: st.container com position:relative envolvendo card + botão,
+    # e o botão posicionado absoluto por cima via CSS (seletor
+    # st-key-card_<id> — ver _inject_css).
+    with st.container(key=f"card_{bet.id}"):
+        st.markdown(card_html, unsafe_allow_html=True)
+
         if st.button(
-            "✏️ Editar" if not editando else "✕ Fechar",
+            "✏️" if not editando else "✕",
             key=f"toggle_editor_{bet.id}",
-            use_container_width=True,
+            help="Editar status/resultado",
         ):
             st.session_state[editando_key] = not editando
             st.rerun()
 
         if editando:
-            col_status, col_resultado = st.columns(2)
-            with col_status:
-                novo_status = st.selectbox(
-                    "Atualizar status",
-                    options=list(STATUS_LABELS.keys()),
-                    format_func=lambda s: STATUS_LABELS[s],
-                    index=list(STATUS_LABELS.keys()).index(bet.status) if bet.status in STATUS_LABELS else 0,
-                    key=f"status_{bet.id}",
-                    label_visibility="collapsed",
-                )
-            with col_resultado:
-                novo_resultado = st.selectbox(
-                    "Resultado da aposta",
-                    options=list(RESULTADO_LABELS.keys()),
-                    format_func=lambda r: RESULTADO_LABELS[r],
-                    index=list(RESULTADO_LABELS.keys()).index(bet.resultado) if bet.resultado in RESULTADO_LABELS else 0,
-                    key=f"resultado_{bet.id}",
-                    label_visibility="collapsed",
-                )
+            with st.container(key=f"editor_{bet.id}"):
+                col_status, col_resultado = st.columns(2)
+                with col_status:
+                    novo_status = st.selectbox(
+                        "Atualizar status",
+                        options=list(STATUS_LABELS.keys()),
+                        format_func=lambda s: STATUS_LABELS[s],
+                        index=list(STATUS_LABELS.keys()).index(bet.status) if bet.status in STATUS_LABELS else 0,
+                        key=f"status_{bet.id}",
+                        label_visibility="collapsed",
+                    )
+                with col_resultado:
+                    novo_resultado = st.selectbox(
+                        "Resultado da aposta",
+                        options=list(RESULTADO_LABELS.keys()),
+                        format_func=lambda r: RESULTADO_LABELS[r],
+                        index=list(RESULTADO_LABELS.keys()).index(bet.resultado) if bet.resultado in RESULTADO_LABELS else 0,
+                        key=f"resultado_{bet.id}",
+                        label_visibility="collapsed",
+                    )
 
-            if novo_status != bet.status:
-                update_status(bet.id, novo_status)
-                st.rerun()
-            if novo_resultado != bet.resultado:
-                update_resultado(bet.id, novo_resultado)
-                st.rerun()
+                if novo_status != bet.status:
+                    update_status(bet.id, novo_status)
+                    st.rerun()
+                if novo_resultado != bet.resultado:
+                    update_resultado(bet.id, novo_resultado)
+                    st.rerun()
 
 
 def _metrics_grid(itens: list[tuple[str, str, str | None]], destaque: bool = False) -> None:
