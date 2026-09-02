@@ -93,17 +93,40 @@ def _polite_delay() -> None:
     time.sleep(random.uniform(0.4, 1.0))
 
 
-def _get_json(page: Page, url: str) -> Optional[dict]:
-    try:
-        _polite_delay()
-        resp = page.goto(url, timeout=20_000)
-        if resp is None or not resp.ok:
-            logger.warning("SofaScore respondeu %s para %s", getattr(resp, "status", "?"), url)
-            return None
-        return resp.json()
-    except Exception:
-        logger.exception("Falha ao consultar SofaScore (%s)", url)
-        return None
+# Status codes que valem retry: bloqueios/rate-limit temporários e erros
+# de servidor — confirmado em produção que o SofaScore devolve 403 mesmo
+# pra requests legítimos de vez em quando (provavelmente bloqueio momentâneo
+# da faixa de IP compartilhada dos runners do GitHub Actions; o mesmo
+# request refeito minutos depois, de outra rede, funcionou normalmente).
+# 404 fica de fora de propósito — é resposta válida de "não existe", não um
+# erro transitório, e re-tentar só atrasaria a resposta correta (None).
+_RETRYABLE_STATUS = {403, 408, 429, 500, 502, 503, 504}
+
+
+def _get_json(page: Page, url: str, tentativas: int = 3) -> Optional[dict]:
+    for tentativa in range(tentativas):
+        try:
+            _polite_delay()
+            resp = page.goto(url, timeout=20_000)
+            status = getattr(resp, "status", None)
+            if resp is not None and resp.ok:
+                return resp.json()
+            if status not in _RETRYABLE_STATUS or tentativa == tentativas - 1:
+                logger.warning("SofaScore respondeu %s para %s", status, url)
+                return None
+            espera = 2 ** tentativa + random.uniform(0, 1)  # 1-2s, 2-3s, ...
+            logger.warning(
+                "SofaScore respondeu %s para %s (tentativa %d/%d) — retry em %.1fs",
+                status, url, tentativa + 1, tentativas, espera,
+            )
+            time.sleep(espera)
+        except Exception:
+            if tentativa == tentativas - 1:
+                logger.exception("Falha ao consultar SofaScore (%s)", url)
+                return None
+            logger.warning("Erro ao consultar SofaScore (%s), tentativa %d/%d", url, tentativa + 1, tentativas)
+            time.sleep(2 ** tentativa + random.uniform(0, 1))
+    return None
 
 
 def _list_tournament_ids(page: Page, dia: datetime) -> list[int]:
