@@ -325,13 +325,16 @@ _FAVORITO_UNICO_PATTERN = re.compile(
 # "APOSTA AO VIVO! Sonego odd: 2.20", sem essa lista o regex greedy pegaria
 # "Sonego" corretamente só por estar mais perto da odd, mas outras frases
 # podem ter ruído colado no nome — mantido como salvaguarda).
-# Formato "N set [Jogador]": o tipster põe o número do set ANTES do nome,
-# como prefixo do mercado, em vez de "[Jogador] vencer o N set" (a ordem
-# mais comum, já coberta por _MARKET_KEYWORDS) — ex: "Ao vivo 1 set Elmer
-# odd: 1.90" significa "Elmer vencer o 1º set", não é status do jogo.
-# Confirmado com o usuário: essa ordem invertida é usada por este tipster.
+# Formato "N set [Jogador]" ou "Set N [Jogador]": o tipster põe o número do
+# set ANTES do nome (em qualquer uma das duas ordens — confirmado com o
+# usuário, esse tipster varia), como prefixo do mercado, em vez de
+# "[Jogador] vencer o N set" (a ordem mais comum, já coberta por
+# _MARKET_KEYWORDS) — ex: "Ao vivo 1 set Elmer odd: 1.90" ou "Ao vivo! Set
+# 2 molcan odd: 2.35" significam "Elmer vencer o 1º set"/"molcan vencer o
+# 2º set", não é status do jogo.
 _SET_PREFIXO_PATTERN = re.compile(
-    r"\b(1|2|3|um|uma|primeiro|segundo|terceiro)[ºoa]?\s*sets?\s+"
+    r"\b(?:(?P<num1>1|2|3|um|uma|primeiro|segundo|terceiro)[ºoa]?\s*sets?"
+    r"|sets?\s+(?P<num2>1|2|3))\s+"
     r"([A-ZÀ-Ú][\wÀ-ú.'\-]+(?:[ \t]+[A-ZÀ-Ú][\wÀ-ú.'\-]+){0,2})"
     r"[ \t]+(?:odd|@|cota)\b",
     re.IGNORECASE,
@@ -406,8 +409,9 @@ def parse_free_text(texto: str) -> ExtractedBet:
     # nome "set Elmer" ou mercado solto sem dono.
     m_set_prefixo = _SET_PREFIXO_PATTERN.search(texto)
     if m_set_prefixo:
-        numero = _normaliza_numero_set(m_set_prefixo.group(1))
-        jogador1 = m_set_prefixo.group(2).strip()
+        numero_bruto = m_set_prefixo.group("num1") or m_set_prefixo.group("num2")
+        numero = _normaliza_numero_set(numero_bruto)
+        jogador1 = m_set_prefixo.group(3).strip()
         mercado = f"{jogador1} vencer o {numero}º set"
 
     for pattern in _PLAYERS_PATTERNS:

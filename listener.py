@@ -210,7 +210,15 @@ async def process_message(message: Message) -> None:
             unidades=1.0,
         )
         bet.id = insert_bet(bet)
-        await send_bet_notification(bet)
+        # Ainda salva no banco (auditoria/debug), mas só notifica no
+        # Telegram se achou ALGUM indício de tip de verdade (um nome ou uma
+        # odd) — mensagem sem sinal nenhum (ex: sticker/print aleatório sem
+        # legenda, mandado no grupo) vira ruído de notificação "❌" toda
+        # vez, sem nada acionável pro usuário conferir.
+        if extracted.jogador1 or extracted.odd is not None:
+            await send_bet_notification(bet)
+        else:
+            logger.debug("Mensagem %s: nenhum indício de tip (sem nome nem odd), notificação pulada.", message.id)
         return
 
     # --- múltipla/combinada (várias seleções, sem 1 confronto único) -------
