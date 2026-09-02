@@ -17,6 +17,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+        - name: Forçar IPv4 (evita IPv6 sem rota no runner do GitHub Actions)
+        run: sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
