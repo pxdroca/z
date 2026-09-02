@@ -431,6 +431,19 @@ def parse_free_text(texto: str) -> ExtractedBet:
     if mercado is None and jogador1 and not jogador2:
         mercado = f"{jogador1} vencer a partida"
 
+    # O mercado capturado por _MARKET_KEYWORDS vem sem o nome do jogador
+    # (ex: "vencer o 2 set", "dupla falta") — quando só 1 jogador é citado
+    # (sem adversário, ver find_favorite_only acima), isso deixa o card da
+    # notificação com um mercado "solto", sem dizer de quem é a aposta.
+    # Prefixa com o jogador nesse caso. Quando há 2 jogadores, não prefixa —
+    # o card já mostra "Jogo: J1 vs J2" separadamente (ver notifier.py), não
+    # precisa repetir o nome dentro do mercado. Também normaliza "o N set"
+    # -> "o Nº set" (ex: "o 2 set" -> "o 2º set").
+    if mercado:
+        mercado = re.sub(r"\bo (\d) set\b", r"o \1º set", mercado, flags=re.IGNORECASE)
+        if jogador1 and not jogador2 and jogador1.lower() not in mercado.lower():
+            mercado = f"{jogador1} {mercado}"
+
     for pattern in _ODD_PATTERNS:
         m = pattern.search(texto)
         if m:
