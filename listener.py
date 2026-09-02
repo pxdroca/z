@@ -69,8 +69,8 @@ from telethon.tl.custom.message import Message
 from config import settings
 from database import bet_exists_for_message, get_sync_state, init_db, insert_bet, set_sync_state
 from extractor import extract_bet_info
-from matcher import find_match
-from models import Bet, BetStatus, ExtractedBet, MatchInfo
+from matcher import build_enabled_adapters, find_match
+from models import Bet, BetStatus, ExtractedBet, MatchInfo, TipoAposta
 from notifier import send_bet_notification, send_plain_message
 
 # Chave usada em sync_state (database.py) para lembrar até onde o polling já
@@ -208,6 +208,37 @@ async def process_message(message: Message) -> None:
             fonte_texto=extracted.texto_bruto,
             mensagem_id=message.id,
             unidades=1.0,
+        )
+        bet.id = insert_bet(bet)
+        await send_bet_notification(bet)
+        return
+
+    # --- múltipla/combinada (várias seleções, sem 1 confronto único) -------
+    # Não passa pelo matcher.py: não há "o jogo" pra confirmar no SofaScore
+    # nem link exato de casa de apostas — só um link genérico de tênis do
+    # dia. Ver extractor._GEMINI_PROMPT para o critério de detecção e
+    # models.Bet.jogo para como isso vira texto de exibição.
+    if extracted.tipo_aposta == TipoAposta.MULTIPLA.value:
+        links = {
+            adapter.slug: {
+                "nome": adapter.display_name,
+                "url": adapter.build_fallback_link(None, None),
+                "exato": False,
+            }
+            for adapter in build_enabled_adapters()
+        }
+        bet = Bet(
+            jogador1=", ".join(extracted.selecoes) if extracted.selecoes else "Múltipla (ver print original)",
+            jogador2="",
+            mercado="Múltipla" + (f" ({len(extracted.selecoes)} seleções)" if extracted.selecoes else ""),
+            odd=extracted.odd,
+            links=links,
+            status=BetStatus.AGENDADA.value,
+            fonte_texto=extracted.texto_bruto,
+            mensagem_id=message.id,
+            unidades=1.0,
+            tipo_aposta=TipoAposta.MULTIPLA.value,
+            selecoes=extracted.selecoes,
         )
         bet.id = insert_bet(bet)
         await send_bet_notification(bet)

@@ -20,6 +20,15 @@ from typing import Optional
 # (bookmakers/* não deveria depender de models.py).
 
 
+class TipoAposta(str, Enum):
+    """Distingue uma tip de 1 confronto (o caso original do projeto) de uma
+    aposta múltipla/combinada (vários jogos numa odd só) — ver
+    extractor.py e README para o critério de detecção."""
+
+    SIMPLES = "simples"
+    MULTIPLA = "multipla"
+
+
 class BetStatus(str, Enum):
     """Ciclo de vida de uma aposta dentro do dashboard — sobre o JOGO
     (agendado/ao vivo/encerrado), não sobre se a aposta em si ganhou."""
@@ -53,16 +62,28 @@ class ExtractedBet:
     odd: Optional[float] = None
     confianca: float = 0.0          # 0-1, quão confiante o extractor está do resultado
     texto_bruto: str = ""           # texto OCR + legenda, para debug/auditoria
+    tipo_aposta: str = TipoAposta.SIMPLES.value  # ver TipoAposta — só o motor Gemini detecta multipla hoje
+    selecoes: list[str] = field(default_factory=list)  # só para multipla, ver Bet.selecoes
 
     @property
     def valido(self) -> bool:
         """
-        Válido o suficiente para seguir pro matcher.py se temos os 2
-        jogadores, OU só o favorito + a odd (o adversário nesse caso é
-        resolvido depois via SofaScore — ver matcher.find_match). Exigir a
-        odd nesse segundo caso evita seguir com ruído de OCR que "parece"
-        um nome mas não é uma tip de verdade.
+        Válido o suficiente para seguir adiante:
+          - multipla: exige só a odd (ver extract_with_gemini) — segue
+            direto pro notifier.py, NÃO passa pelo matcher.py (não há um
+            confronto único pra confirmar). `selecoes` pode vir vazia (ex:
+            "+N seleções mais" escondendo os nomes) — nesse caso vira uma
+            notificação genérica no listener.py, mas ainda é um resultado
+            válido (não um erro de extração): sabemos que É uma múltipla,
+            só não sabemos os detalhes de cada perna.
+          - simples: os 2 jogadores, OU só o favorito + a odd (o adversário
+            nesse caso é resolvido depois via SofaScore — ver
+            matcher.find_match). Exigir a odd nesse segundo caso evita
+            seguir com ruído de OCR que "parece" um nome mas não é uma tip
+            de verdade.
         """
+        if self.tipo_aposta == TipoAposta.MULTIPLA.value:
+            return self.odd is not None
         if self.jogador1 and self.jogador2:
             return True
         return bool(self.jogador1) and self.odd is not None
@@ -109,7 +130,13 @@ class Bet:
     vencedor_partida: Optional[str] = None    # nome do jogador vencedor, preenchido junto com placar_final
     unidades: float = 1.0                     # stake em unidades — fixo em 1.0 (tipster não indica stake)
     resultado: str = ResultadoAposta.PENDENTE.value  # se A APOSTA ganhou — definido manualmente no painel
+    tipo_aposta: str = TipoAposta.SIMPLES.value      # "simples" (1 confronto) ou "multipla" (ver TipoAposta)
+    selecoes: list[str] = field(default_factory=list)  # só para multipla: 1 item por seleção, ex: "Alcaraz"
 
     @property
     def jogo(self) -> str:
+        if self.tipo_aposta == TipoAposta.MULTIPLA.value:
+            if self.selecoes:
+                return ", ".join(self.selecoes)
+            return self.jogador1 or "Múltipla (detalhes no print original)"
         return f"{self.jogador1} vs {self.jogador2}"

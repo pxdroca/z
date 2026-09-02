@@ -32,7 +32,7 @@ from sofascore_client import find_canonical_match, find_canonical_match_by_name
 logger = logging.getLogger(__name__)
 
 
-def _build_enabled_adapters():
+def build_enabled_adapters():
     adapters = []
     for slug in settings.BOOKMAKERS:
         adapter_cls = REGISTRY.get(slug)
@@ -76,7 +76,7 @@ def find_match(
     # mesmo que queremos — sem confirmar o confronto, não faz sentido
     # arriscar um link "exato" errado.
     links: dict = {}
-    for adapter in _build_enabled_adapters():
+    for adapter in build_enabled_adapters():
         try:
             link = adapter.get_link(j1, j2, torneio, data_hora)
         except Exception:

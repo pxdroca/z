@@ -64,15 +64,38 @@ def ocr_image_easyocr(image_path: str) -> str:
 
 _GEMINI_PROMPT = """\
 Você recebe o print de uma dica (tip) de aposta esportiva de tênis, enviada em um
-grupo de Telegram. Extraia as informações abaixo e responda SOMENTE com um JSON
-válido, sem markdown, sem comentários, no formato exato:
+grupo de Telegram. Primeiro identifique se é uma aposta SIMPLES (1 confronto só)
+ou uma MÚLTIPLA/COMBINADA (várias seleções de jogos diferentes combinadas numa
+odd só — geralmente um app de apostas mostra isso como uma lista de "Nome - Nome"
+com um mercado e uma sub-odd cada, seguido de uma odd total bem maior que
+qualquer sub-odd individual). Sinais de múltipla: cabeçalho tipo "N SELEÇÕES",
+"SIMPLES • N" (esse "SIMPLES" ali é o TIPO de aposta de cada perna individual,
+não quer dizer que a aposta toda tem 1 jogo só), ou texto "+N seleções mais".
+
+Responda SOMENTE com um JSON válido, sem markdown, sem comentários, no formato
+exato:
 
 {
+  "tipo_aposta": "simples" ou "multipla",
+
+  // Preencha isto SE tipo_aposta == "simples" (senão deixe tudo null):
   "jogador1": "nome do primeiro tenista (ou null se não achar)",
   "jogador2": "nome do segundo tenista (ou null se não achar)",
   "torneio": "nome do torneio/circuito, ex: 'ATP Us Open' (ou null)",
   "mercado": "mercado da aposta, ex: 'Vencedor da partida', 'Over 22.5 games' (ou null)",
-  "odd": 1.85  // número decimal da odd (ou null se não achar)
+
+  // Preencha isto SE tipo_aposta == "multipla" (senão deixe null/[]):
+  // "selecoes": só o jogador FAVORECIDO de cada perna (quem a aposta diz que
+  // vence/cobre aquele mercado) — 1 nome por seleção, na ordem que aparecem.
+  // Se algumas seleções estiverem ocultas atrás de um "+N seleções mais" (ou
+  // similar) e você não conseguir ver o nome delas, NÃO invente: deixe
+  // "selecoes" só com as que você consegue ler de verdade na imagem, e marque
+  // "selecoes_ocultas": true.
+  "selecoes": ["Sobrenome1", "Sobrenome2"],
+  "selecoes_ocultas": false,
+
+  // Sempre preencha isto, nos dois casos:
+  "odd": 1.85  // número decimal da odd TOTAL da aposta (ou null se não achar)
 }
 
 Texto adicional (legenda da mensagem, pode estar vazio) que complementa a imagem:
@@ -124,6 +147,22 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
         odd = float(odd) if odd is not None else None
     except (TypeError, ValueError):
         odd = None
+
+    if data.get("tipo_aposta") == "multipla":
+        selecoes = [s for s in (data.get("selecoes") or []) if s]
+        selecoes_ocultas = bool(data.get("selecoes_ocultas"))
+        # Se há seleções que o Gemini não conseguiu ler (escondidas atrás de
+        # "+N seleções mais"), não fingimos saber quem são — vira uma
+        # múltipla "genérica", sem lista de jogadores (ver notifier.py).
+        if selecoes_ocultas:
+            selecoes = []
+        return ExtractedBet(
+            odd=odd,
+            texto_bruto=caption_text,
+            tipo_aposta="multipla",
+            selecoes=selecoes,
+            confianca=0.7 if (odd is not None and selecoes) else 0.4,
+        )
 
     bet = ExtractedBet(
         jogador1=data.get("jogador1"),
@@ -401,7 +440,11 @@ def extract_bet_info(image_path: Optional[str], caption_text: Optional[str] = No
     # Se o texto explícito da legenda tiver labels que o OCR/print não tinha
     # (comum: tipster escreve "Odd: 1.85" na legenda, print só mostra o jogo),
     # complementamos o resultado sem sobrescrever o que já veio preenchido.
-    if caption_text and (not bet.mercado or bet.odd is None or not bet.torneio):
+    # Pulado para múltipla: jogador1/jogador2/torneio ficam vazios de
+    # propósito nesse caso (ver extract_with_gemini) — não faz sentido
+    # tentar "completar" com um par de nomes que parse_free_text ache solto
+    # na legenda, que não tem relação com as seleções da múltipla.
+    if bet.tipo_aposta != "multipla" and caption_text and (not bet.mercado or bet.odd is None or not bet.torneio):
         extra = parse_free_text(caption_text)
         bet.mercado = bet.mercado or extra.mercado
         bet.odd = bet.odd if bet.odd is not None else extra.odd
@@ -409,8 +452,14 @@ def extract_bet_info(image_path: Optional[str], caption_text: Optional[str] = No
         bet.jogador1 = bet.jogador1 or extra.jogador1
         bet.jogador2 = bet.jogador2 or extra.jogador2
 
-    logger.info(
-        "Extração: %s vs %s | torneio=%s | mercado=%s | odd=%s | confiança=%.2f",
-        bet.jogador1, bet.jogador2, bet.torneio, bet.mercado, bet.odd, bet.confianca,
-    )
+    if bet.tipo_aposta == "multipla":
+        logger.info(
+            "Extração: múltipla, seleções=%s | odd=%s | confiança=%.2f",
+            bet.selecoes, bet.odd, bet.confianca,
+        )
+    else:
+        logger.info(
+            "Extração: %s vs %s | torneio=%s | mercado=%s | odd=%s | confiança=%.2f",
+            bet.jogador1, bet.jogador2, bet.torneio, bet.mercado, bet.odd, bet.confianca,
+        )
     return bet

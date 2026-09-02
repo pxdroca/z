@@ -49,7 +49,7 @@ def _escape_markdown_v2(text: str) -> str:
 
 def format_bet_card(bet: Bet) -> str:
     """Monta o texto do card em MarkdownV2 (os links viram botões, não texto — veja build_keyboard)."""
-    jogo = _escape_markdown_v2(f"{bet.jogador1} vs {bet.jogador2}")
+    jogo = _escape_markdown_v2(bet.jogo)  # bet.jogo já formata direito pra simples e pra múltipla (ver models.py)
     torneio = _escape_markdown_v2(bet.torneio or "não identificado")
     mercado = _escape_markdown_v2(bet.mercado or "não identificado")
     odd_txt = _escape_markdown_v2(f"{bet.odd:.2f}" if bet.odd is not None else "?")
@@ -67,15 +67,23 @@ def format_bet_card(bet: Bet) -> str:
         "encerrada": "⏹️",
     }.get(bet.status, "ℹ️")
 
+    eh_multipla = bet.tipo_aposta == "multipla"
+    titulo = "🎾 *Nova Múltipla Detectada*" if eh_multipla else "🎾 *Nova Tip Detectada*"
+    rotulo_jogo = "*Seleções:*" if eh_multipla else "*Jogo:*"
+
     linhas = [
-        f"🎾 *Nova Tip Detectada* {status_emoji}",
+        f"{titulo} {status_emoji}",
         "",
-        f"*Jogo:* {jogo}",
-        f"*Torneio:* {torneio}",
-        f"*Mercado:* {mercado}",
-        f"*Odd:* {odd_txt}",
-        f"*Data/Hora:* {data_txt}",
+        f"{rotulo_jogo} {jogo}",
     ]
+    # torneio/data específicos não existem numa múltipla (são vários jogos
+    # diferentes) — omite essas linhas em vez de mostrar "não identificado".
+    if not eh_multipla:
+        linhas.append(f"*Torneio:* {torneio}")
+    linhas.append(f"*Mercado:* {mercado}")
+    linhas.append(f"*Odd:* {odd_txt}")
+    if not eh_multipla:
+        linhas.append(f"*Data/Hora:* {data_txt}")
     return "\n".join(linhas)
 
 

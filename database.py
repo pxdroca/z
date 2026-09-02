@@ -70,6 +70,13 @@ _EXTRA_COLUMNS = {
     "vencedor_partida": "TEXT",
     "unidades": "REAL DEFAULT 1.0",
     "resultado": "TEXT DEFAULT 'pendente'",
+    # tipo_aposta: 'simples' (1 confronto, o caso original) ou 'multipla'
+    # (várias seleções combinadas numa odd só — ver extractor.py). Quando
+    # multipla, jogador1/jogador2 viram só um resumo textual (não há um
+    # confronto único pra confirmar no SofaScore/casas de apostas) e a
+    # lista real de seleções fica em selecoes_json.
+    "tipo_aposta": "TEXT DEFAULT 'simples'",
+    "selecoes_json": "TEXT",
 }
 
 
@@ -112,6 +119,10 @@ def _row_to_bet(row: dict) -> Bet:
         links = json.loads(row["links_json"]) if row["links_json"] else {}
     except (json.JSONDecodeError, TypeError):
         links = {}
+    try:
+        selecoes = json.loads(row["selecoes_json"]) if row.get("selecoes_json") else []
+    except (json.JSONDecodeError, TypeError):
+        selecoes = []
     return Bet(
         id=row["id"],
         jogador1=row["jogador1"],
@@ -130,6 +141,8 @@ def _row_to_bet(row: dict) -> Bet:
         vencedor_partida=row["vencedor_partida"],
         unidades=row["unidades"] if row["unidades"] is not None else 1.0,
         resultado=row["resultado"] or ResultadoAposta.PENDENTE.value,
+        tipo_aposta=row.get("tipo_aposta") or "simples",
+        selecoes=selecoes,
     )
 
 
@@ -147,8 +160,8 @@ def insert_bet(bet: Bet) -> int:
             """
             INSERT INTO bets (jogador1, jogador2, torneio, mercado, odd,
                                data_hora, links_json, status, fonte_texto, mensagem_id,
-                               sofascore_event_id, unidades, resultado)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                               sofascore_event_id, unidades, resultado, tipo_aposta, selecoes_json)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -165,6 +178,8 @@ def insert_bet(bet: Bet) -> int:
                 bet.sofascore_event_id,
                 bet.unidades,
                 bet.resultado,
+                bet.tipo_aposta,
+                json.dumps(bet.selecoes, ensure_ascii=False) if bet.selecoes else None,
             ),
         )
         new_id = cur.fetchone()["id"]
