@@ -27,7 +27,7 @@ from typing import Optional
 from bookmakers import REGISTRY
 from config import settings
 from models import MatchInfo
-from sofascore_client import find_canonical_match
+from sofascore_client import find_canonical_match, find_canonical_match_by_name
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +45,23 @@ def _build_enabled_adapters():
 
 def find_match(
     jogador1: str,
-    jogador2: str,
+    jogador2: Optional[str],
     dias_de_busca: int = 3,
     referencia: Optional[datetime] = None,
 ) -> MatchInfo:
-    """Ponto de entrada principal, chamado pelo listener.py depois do extractor."""
-    if not jogador1 or not jogador2:
+    """
+    Ponto de entrada principal, chamado pelo listener.py depois do
+    extractor. `jogador2` pode ser None — caso do tipster ter citado só o
+    favorito (ver extractor.find_favorite_only); nesse caso o adversário é
+    resolvido consultando o SofaScore só pelo jogador1.
+    """
+    if not jogador1:
         return MatchInfo(encontrado=False)
 
-    canonico = find_canonical_match(jogador1, jogador2, dias_de_busca=dias_de_busca, referencia=referencia)
+    if jogador2:
+        canonico = find_canonical_match(jogador1, jogador2, dias_de_busca=dias_de_busca, referencia=referencia)
+    else:
+        canonico = find_canonical_match_by_name(jogador1, referencia=referencia)
 
     # Nomes/torneio/hora "oficiais": usa o que o SofaScore confirmou, ou
     # cai para o que o OCR extraiu, se o SofaScore não achar nada.
@@ -62,6 +70,11 @@ def find_match(
     torneio = canonico.torneio_oficial if canonico else None
     data_hora = canonico.data_hora if canonico else None
 
+    # Se o SofaScore não achou o adversário (canonico None quando jogador2
+    # era None de entrada — ver acima), os adaptadores sempre caem no link
+    # aproximado aqui: pair_matches() nunca bate com j2=None, e é isso
+    # mesmo que queremos — sem confirmar o confronto, não faz sentido
+    # arriscar um link "exato" errado.
     links: dict = {}
     for adapter in _build_enabled_adapters():
         try:

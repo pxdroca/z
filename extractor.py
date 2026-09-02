@@ -228,6 +228,43 @@ _APOSTA_FAVORITO_PATTERN = re.compile(
     r"aposta[^:\n]*:\s*(.+?)\s*(?:odd|@|cota)\b", re.IGNORECASE,
 )
 
+# Formato "só o favorito, sem adversário": o tipster cita apenas o nome do
+# jogador em quem apostou, sem "x"/"vs" e sem um segundo nome — ex:
+# "Thomas Faurel odd: 1.74" ou "APOSTA AO VIVO! Sonego odd: 2.20". Usado
+# como último recurso (depois de _PLAYERS_PATTERNS e _find_players_in_card_line
+# falharem em achar os DOIS jogadores) — ver find_favorite_only() abaixo.
+# Aceita 1 a 3 palavras capitalizadas (nome próprio, ou só sobrenome) logo
+# antes do rótulo da odd, ignorando ruído de prefixo (ex: "APOSTA AO VIVO!").
+_FAVORITO_UNICO_PATTERN = re.compile(
+    r"([A-ZÀ-Ú][\wÀ-ú.'\-]+(?:[ \t]+[A-ZÀ-Ú][\wÀ-ú.'\-]+){0,2})"
+    r"[ \t]+(?:odd|@|cota)[ \t]*[:\-]?[ \t]*\d",
+    re.IGNORECASE,
+)
+
+# Palavras que não são nome de jogador, mesmo capitalizadas — evita que
+# _FAVORITO_UNICO_PATTERN capture o prefixo em vez do nome real (ex: em
+# "APOSTA AO VIVO! Sonego odd: 2.20", sem essa lista o regex greedy pegaria
+# "Sonego" corretamente só por estar mais perto da odd, mas outras frases
+# podem ter ruído colado no nome — mantido como salvaguarda).
+_FAVORITO_IGNORE_WORDS = {
+    "aposta", "ao", "vivo", "live", "odd", "cota", "green", "red", "tip",
+}
+
+
+def find_favorite_only(texto: str) -> Optional[str]:
+    """Último recurso: acha o nome do jogador favorito quando o tipster cita
+    só ele (sem adversário) — ver _FAVORITO_UNICO_PATTERN acima."""
+    for linha in texto.splitlines():
+        m = _FAVORITO_UNICO_PATTERN.search(linha)
+        if not m:
+            continue
+        candidato = m.group(1).strip()
+        # remove palavras de ruído do início (ex: "AO VIVO! Sonego" -> "Sonego")
+        palavras = [p for p in candidato.split() if p.strip("!:.,").lower() not in _FAVORITO_IGNORE_WORDS]
+        if palavras:
+            return " ".join(palavras).strip("!:.,")
+    return None
+
 
 def _infer_market_from_favorite(texto: str, jogador1: Optional[str], jogador2: Optional[str]) -> Optional[str]:
     """Se o texto citar (por nome ou sobrenome) um dos jogadores logo antes da
@@ -265,6 +302,12 @@ def parse_free_text(texto: str) -> ExtractedBet:
 
     if jogador1 is None or jogador2 is None:
         jogador1, jogador2 = _find_players_in_card_line(texto)
+
+    # Último recurso: só o nome do favorito, sem adversário (ver
+    # find_favorite_only) — o adversário é resolvido depois pelo matcher.py
+    # consultando o SofaScore (find_canonical_match_by_name).
+    if jogador1 is None and jogador2 is None:
+        jogador1 = find_favorite_only(texto)
 
     for campo, pattern in _LABELLED_PATTERNS.items():
         m = pattern.search(texto)
@@ -307,6 +350,8 @@ def parse_free_text(texto: str) -> ExtractedBet:
     confianca = 0.0
     if jogador1 and jogador2:
         confianca += 0.5
+    elif jogador1:  # só o favorito, sem adversário — menos confiável que o par completo
+        confianca += 0.25
     if odd is not None:
         confianca += 0.3
     if mercado:

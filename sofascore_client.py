@@ -247,6 +247,80 @@ def find_canonical_match(
     return resultado
 
 
+_TENNIS_SPORT_SLUG = "tennis"
+
+
+def find_canonical_match_by_name(
+    jogador: str,
+    referencia: Optional[datetime] = None,
+) -> Optional[CanonicalMatch]:
+    """
+    Variante de find_canonical_match() para quando o tipster cita só o
+    jogador favorito, sem o adversário (ex: "Thomas Faurel odd: 1.74") — o
+    adversário nesse caso vem do próprio SofaScore.
+
+    Usa a busca por nome do próprio SofaScore (GET /api/v1/search/all?q=...)
+    em vez de varrer todos os torneios de tênis do dia — calibrado ao vivo
+    em 02/09/2026: mais rápido (2 chamadas de API em vez de ~80+) e evita um
+    bug real observado varrendo o dia inteiro (o Chromium crasha depois de
+    muitas navegações seguidas na mesma page). Para cada jogador que a busca
+    devolver com esse nome (pode haver mais de um — nomes se repetem), busca
+    o jogo mais recente/atual dele (GET /api/v1/team/{id}/featured-event) e
+    fica com o candidato cujo confronto está mais perto de `referencia`
+    (agora, por padrão) — jogos muito no passado ou muito no futuro (torneio
+    diferente, mesmo nome de outro jogador) são descartados.
+    """
+    referencia = referencia or datetime.now()
+
+    def _buscar(page: Page) -> Optional[CanonicalMatch]:
+        search_url = f"{SOFASCORE_BASE_URL}/search/all?q={jogador}"
+        search_data = _get_json(page, search_url)
+        if not search_data:
+            return None
+
+        player_ids = []
+        for r in search_data.get("results", []):
+            entity = r.get("entity") or {}
+            sport = (entity.get("sport") or {}).get("slug")
+            # a busca cobre todos os esportes/times/torneios; filtra só
+            # entidades de tênis com id (jogadores aparecem como type="team"
+            # nesse endpoint — é como o SofaScore trata "participante" aqui).
+            if sport == _TENNIS_SPORT_SLUG and entity.get("id"):
+                player_ids.append(entity["id"])
+
+        if not player_ids:
+            return None
+
+        melhor: Optional[CanonicalMatch] = None
+        menor_diferenca: Optional[float] = None
+        for pid in player_ids:
+            featured_url = f"{SOFASCORE_BASE_URL}/team/{pid}/featured-event"
+            data = _get_json(page, featured_url)
+            evt = (data or {}).get("featuredEvent")
+            if not evt:
+                continue
+            candidato = _extract_event(evt)
+            if not candidato or not candidato.data_hora:
+                continue
+            diferenca = abs((candidato.data_hora - referencia).total_seconds())
+            if menor_diferenca is None or diferenca < menor_diferenca:
+                menor_diferenca = diferenca
+                melhor = candidato
+
+        if melhor:
+            logger.info(
+                "SofaScore confirmou (nome único): %s x %s | %s | %s",
+                melhor.jogador1_oficial, melhor.jogador2_oficial,
+                melhor.torneio_oficial, melhor.data_hora,
+            )
+        return melhor
+
+    resultado = _run_with_browser(_buscar)
+    if resultado is None:
+        logger.warning("SofaScore: confronto não encontrado (nome único) para %s", jogador)
+    return resultado
+
+
 # Winner code confirmado ao vivo (evento finalizado, 31/08/2026): 1 = casa,
 # presume-se 2 = visitante (não confirmado ao vivo, mas é o padrão universal
 # de outros esportes na mesma API — ajuste aqui se algum dia vier diferente).

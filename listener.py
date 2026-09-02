@@ -221,9 +221,14 @@ async def process_message(message: Message) -> None:
 
     status = BetStatus.AGENDADA.value if match.encontrado else BetStatus.NAO_ENCONTRADA.value
 
+    # jogador2 é NOT NULL no banco. Fica None quando o tipster citou só o
+    # favorito (ver extractor.find_favorite_only) E o SofaScore não
+    # conseguiu confirmar o adversário sozinho (ambíguo ou sem jogo hoje) —
+    # nesse caso o status já fica NAO_ENCONTRADA (match.encontrado=False),
+    # então "?" aqui só evita quebrar a constraint, não afeta o app.
     bet = Bet(
         jogador1=match.jogador1_oficial or extracted.jogador1,
-        jogador2=match.jogador2_oficial or extracted.jogador2,
+        jogador2=match.jogador2_oficial or extracted.jogador2 or "?",
         torneio=match.torneio_oficial or extracted.torneio,
         mercado=extracted.mercado,
         odd=extracted.odd,

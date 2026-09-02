@@ -56,8 +56,16 @@ class ExtractedBet:
 
     @property
     def valido(self) -> bool:
-        """Consideramos válido o suficiente para seguir pro matcher se temos os 2 jogadores."""
-        return bool(self.jogador1) and bool(self.jogador2)
+        """
+        Válido o suficiente para seguir pro matcher.py se temos os 2
+        jogadores, OU só o favorito + a odd (o adversário nesse caso é
+        resolvido depois via SofaScore — ver matcher.find_match). Exigir a
+        odd nesse segundo caso evita seguir com ruído de OCR que "parece"
+        um nome mas não é uma tip de verdade.
+        """
+        if self.jogador1 and self.jogador2:
+            return True
+        return bool(self.jogador1) and self.odd is not None
 
 
 @dataclass
