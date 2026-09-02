@@ -325,12 +325,30 @@ _FAVORITO_UNICO_PATTERN = re.compile(
 # "APOSTA AO VIVO! Sonego odd: 2.20", sem essa lista o regex greedy pegaria
 # "Sonego" corretamente só por estar mais perto da odd, mas outras frases
 # podem ter ruído colado no nome — mantido como salvaguarda).
+# Formato "N set [Jogador]": o tipster põe o número do set ANTES do nome,
+# como prefixo do mercado, em vez de "[Jogador] vencer o N set" (a ordem
+# mais comum, já coberta por _MARKET_KEYWORDS) — ex: "Ao vivo 1 set Elmer
+# odd: 1.90" significa "Elmer vencer o 1º set", não é status do jogo.
+# Confirmado com o usuário: essa ordem invertida é usada por este tipster.
+_SET_PREFIXO_PATTERN = re.compile(
+    r"\b(1|2|3|um|uma|primeiro|segundo|terceiro)[ºoa]?\s*sets?\s+"
+    r"([A-ZÀ-Ú][\wÀ-ú.'\-]+(?:[ \t]+[A-ZÀ-Ú][\wÀ-ú.'\-]+){0,2})"
+    r"[ \t]+(?:odd|@|cota)\b",
+    re.IGNORECASE,
+)
+
+_SET_NUMERO_POR_EXTENSO = {
+    "um": "1", "uma": "1", "primeiro": "1",
+    "segundo": "2", "terceiro": "3",
+}
+
+
+def _normaliza_numero_set(numero: str) -> str:
+    return _SET_NUMERO_POR_EXTENSO.get(numero.lower(), numero)
+
+
 _FAVORITO_IGNORE_WORDS = {
     "aposta", "ao", "vivo", "live", "odd", "cota", "green", "red", "tip",
-    # contexto de status do jogo, não nome de jogador — ex: "Ao vivo 1 set
-    # Elmer odd: 1.90" (o "1 set" aqui informa que o jogo já está no 1º set,
-    # não é um mercado nem faz parte do nome).
-    "set", "sets", "game", "games",
 }
 
 
@@ -382,14 +400,27 @@ def parse_free_text(texto: str) -> ExtractedBet:
     jogador1 = jogador2 = torneio = mercado = None
     odd: Optional[float] = None
 
+    # Formato "N set [Jogador] odd" (número do set ANTES do nome) — ver
+    # _SET_PREFIXO_PATTERN. Checado primeiro porque resolve jogador E
+    # mercado juntos, evitando a ambiguidade de "1 set Elmer" ser lido como
+    # nome "set Elmer" ou mercado solto sem dono.
+    m_set_prefixo = _SET_PREFIXO_PATTERN.search(texto)
+    if m_set_prefixo:
+        numero = _normaliza_numero_set(m_set_prefixo.group(1))
+        jogador1 = m_set_prefixo.group(2).strip()
+        mercado = f"{jogador1} vencer o {numero}º set"
+
     for pattern in _PLAYERS_PATTERNS:
         m = pattern.search(texto)
         if m:
             jogador1, jogador2 = m.group(1).strip(), m.group(2).strip()
+            mercado = None  # achou os 2 jogadores de verdade — descarta o palpite do set-prefixo acima
             break
 
     if jogador1 is None or jogador2 is None:
-        jogador1, jogador2 = _find_players_in_card_line(texto)
+        j1, j2 = _find_players_in_card_line(texto)
+        if j1 and j2:
+            jogador1, jogador2, mercado = j1, j2, None
 
     for campo, pattern in _LABELLED_PATTERNS.items():
         m = pattern.search(texto)
