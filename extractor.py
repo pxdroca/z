@@ -327,6 +327,10 @@ _FAVORITO_UNICO_PATTERN = re.compile(
 # podem ter ruído colado no nome — mantido como salvaguarda).
 _FAVORITO_IGNORE_WORDS = {
     "aposta", "ao", "vivo", "live", "odd", "cota", "green", "red", "tip",
+    # contexto de status do jogo, não nome de jogador — ex: "Ao vivo 1 set
+    # Elmer odd: 1.90" (o "1 set" aqui informa que o jogo já está no 1º set,
+    # não é um mercado nem faz parte do nome).
+    "set", "sets", "game", "games",
 }
 
 
@@ -338,8 +342,13 @@ def find_favorite_only(texto: str) -> Optional[str]:
         if not m:
             continue
         candidato = m.group(1).strip()
-        # remove palavras de ruído do início (ex: "AO VIVO! Sonego" -> "Sonego")
-        palavras = [p for p in candidato.split() if p.strip("!:.,").lower() not in _FAVORITO_IGNORE_WORDS]
+        # remove palavras de ruído (ex: "AO VIVO! Sonego" -> "Sonego") e
+        # números soltos (ex: "1 set Elmer" -> "Elmer", já sem "set" pela
+        # lista acima, mas o "1" também precisa cair fora).
+        palavras = [
+            p for p in candidato.split()
+            if p.strip("!:.,").lower() not in _FAVORITO_IGNORE_WORDS and not p.strip("!:.,").isdigit()
+        ]
         if palavras:
             return " ".join(palavras).strip("!:.,")
     return None
