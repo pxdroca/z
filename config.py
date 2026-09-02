@@ -63,7 +63,13 @@ class Settings:
     # --- OCR / extractor ---
     OCR_ENGINE: str = field(default_factory=lambda: os.getenv("OCR_ENGINE", "easyocr").lower())
     GEMINI_API_KEY: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
-    GEMINI_MODEL: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
+    # gemini-2.5-flash foi descontinuado para novas API keys (erro 404 "no
+    # longer available to new users" — confirmado ao vivo em 02/09/2026).
+    # gemini-flash-latest sempre aponta pro modelo estável mais recente da
+    # linha "flash", evitando esse tipo de quebra silenciosa de novo no
+    # futuro (o pipeline cai pro parser de regex sem avisar quando o Gemini
+    # falha — ver extract_bet_info em extractor.py).
+    GEMINI_MODEL: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-flash-latest"))
 
     # --- Banco de dados / mídia ---
     # Connection string do Postgres (Neon) — usada tanto local quanto em
