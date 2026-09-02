@@ -27,7 +27,7 @@ _bet_card().
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 import pandas as pd
 import streamlit as st
@@ -92,22 +92,33 @@ BOOKMAKER_BADGES = {
 }
 
 
-def _sugerir_resultado(bet: Bet) -> str | None:
+def _autoconferir_resultado(bet: Bet) -> str | None:
     """
-    Sugestão de green/red pra apostas que por algum motivo ainda estão
-    "pendente" apesar do jogo já ter terminado — normalmente o
+    Grava automaticamente green/red pra apostas que por algum motivo ainda
+    estão "pendente" apesar do jogo já ter terminado — normalmente
     score_updater.py já grava isso sozinho assim que a partida encerra (ver
-    resultado_checker.checar_resultado), então esta função só serve de
-    fallback (ex: aposta processada antes dessa gravação automática existir).
+    resultado_checker.checar_resultado), mas uma partida "encerrada" nunca
+    mais é revisitada por ele (list_trackable_bets só cobre agendada/ao_vivo),
+    então se por qualquer motivo aquele ciclo não conseguiu decidir (ex:
+    EventStatus.sets ainda incompleto no instante exato em que o SofaScore
+    marcou a partida como finished — condição de corrida observada em
+    produção), fica pendente pra sempre sem isto aqui.
 
     Mesma lógica central de resultado_checker.py (vencedor de partida,
-    vencedor de set específico/genérico, vencer sem perder set) — só uma
-    SUGESTÃO exibida no card, quem confirma é sempre o usuário
-    (novo_resultado no selectbox), nunca grava sozinho aqui. Mercados que
-    resultado_checker.py não sabe interpretar (aces, games, dupla falta,
-    placar exato) não sugerem nada (None).
+    vencedor de set específico/genérico, vencer sem perder set), mas
+    reconstruída a partir do placar_final/vencedor_partida já persistidos
+    (ver checar_resultado_de_bet) em vez do EventStatus ao vivo. Grava
+    direto no banco (update_resultado) — decisão do usuário: a conferência
+    desses mercados deve ser automática, não uma sugestão que espera
+    confirmação manual. Mercados que resultado_checker.py não sabe
+    interpretar (aces, games, dupla falta, placar exato) continuam
+    pendentes, aguardando conferência manual do usuário.
     """
-    return resultado_checker.checar_resultado_de_bet(bet)
+    resultado = resultado_checker.checar_resultado_de_bet(bet)
+    if resultado:
+        update_resultado(bet.id, resultado)
+        bet.resultado = resultado
+    return resultado
 
 
 def _log_debug_info(bet: Bet) -> None:
@@ -219,6 +230,22 @@ def _inject_css() -> None:
         }
         .main .block-container {
             padding-top: 2.5rem !important;
+        }
+
+        /* ---------------------------------------------------------------
+           Sidebar de filtros no lado direito da tela (pedido do usuário) —
+           reordena via flexbox em vez de mover o elemento no DOM (o
+           stAppViewContainer real é "display:flex; flex-direction:row"
+           com [decoração vazia, sidebar, main] nessa ordem — troca só a
+           ordem visual). HACK sobre estrutura interna do Streamlit sem
+           contrato estável: pode quebrar em atualizações futuras da
+           biblioteca, testado na versão em uso em 02/09/2026.
+        --------------------------------------------------------------- */
+        section[data-testid="stSidebar"] {
+            order: 2;
+        }
+        section.stMain {
+            order: 1;
         }
 
         /* ---------------------------------------------------------------
@@ -350,16 +377,6 @@ def _inject_css() -> None:
         .resultado-red { background: rgba(239,68,68,0.16); color: var(--red); }
         .resultado-void { background: rgba(154,160,172,0.16); color: var(--muted); }
         .resultado-pendente { background: rgba(215,242,77,0.14); color: var(--lime); }
-
-        /* Sugestão automática de conferência (aposta bateu/não bateu) */
-        .sugestao-conferencia {
-            border-radius: 10px;
-            padding: 0.45rem 0.75rem;
-            font-family: 'Work Sans', sans-serif;
-            font-weight: 600;
-            font-size: 0.85rem;
-            margin-bottom: 0.8rem;
-        }
 
         /* ---------------------------------------------------------------
            Editor de status/resultado — visualmente "colado" na base do
@@ -507,21 +524,20 @@ def _inject_css() -> None:
                em destaque sem precisar de caixinha.
         --------------------------------------------------------------- */
         .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(6, minmax(0, 1fr));
-            gap: 0.7rem 0.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.7rem 2rem;
             margin-bottom: 0.9rem;
             padding-top: 0.7rem;
             border-top: 1px solid var(--card-border);
         }
         .metrics-grid-destaque {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.5rem;
+            gap: 2.2rem;
             margin-bottom: 0;
             padding-top: 0;
             border-top: none;
         }
-        .metric-cell { min-width: 0; }
+        .metric-cell { min-width: 0; flex: 0 0 auto; }
         .metric-label {
             font-family: 'Work Sans', sans-serif;
             color: var(--muted);
@@ -567,6 +583,7 @@ def _inject_css() -> None:
             .bet-card .info-row { gap: 1rem; }
 
             .metrics-grid {
+                display: grid;
                 grid-template-columns: repeat(3, minmax(0, 1fr));
                 gap: 0.6rem 0.4rem;
             }
@@ -593,7 +610,11 @@ def _sidebar_filters() -> tuple[list[str], date, date]:
     status_labels_sel = st.sidebar.multiselect(
         "Status",
         options=[STATUS_LABELS[s] for s in status_opcoes],
-        default=[STATUS_LABELS[BetStatus.AGENDADA.value], STATUS_LABELS[BetStatus.AO_VIVO.value]],
+        default=[
+            STATUS_LABELS[BetStatus.AGENDADA.value],
+            STATUS_LABELS[BetStatus.AO_VIVO.value],
+            STATUS_LABELS[BetStatus.ENCERRADA.value],
+        ],
     )
     label_to_status = {v: k for k, v in STATUS_LABELS.items()}
     status_selecionados = [label_to_status[l] for l in status_labels_sel] or status_opcoes
@@ -650,6 +671,13 @@ def _calcular_estatisticas(apostas: list[Bet]) -> dict:
 def _bet_card(bet: Bet) -> None:
     _log_debug_info(bet)
 
+    # Se o jogo já encerrou mas o resultado ainda ficou "pendente" (o
+    # score_updater.py não conseguiu decidir no ciclo em que a partida
+    # terminou, e depois de "encerrada" ele nunca mais reprocessa essa
+    # aposta), tenta conferir e gravar agora — ver _autoconferir_resultado.
+    if bet.status == BetStatus.ENCERRADA.value and bet.resultado == ResultadoAposta.PENDENTE.value:
+        _autoconferir_resultado(bet)
+
     status_badge_class = STATUS_CSS_CLASS.get(bet.status, "status-alerta")
     status_label = STATUS_LABELS.get(bet.status, bet.status)
     resultado_badge_class = RESULTADO_CSS_CLASS.get(bet.resultado, "resultado-pendente")
@@ -664,19 +692,6 @@ def _bet_card(bet: Bet) -> None:
         placar_html = (
             f'<div class="placar-final">🏆 {bet.vencedor_partida or "?"} venceu '
             f'<span class="placar-numeros">{bet.placar_final}</span></div>'
-        )
-
-    # Sugestão automática de conferência — só exibida quando a partida já
-    # terminou e o mercado é do tipo "{Nome} ganhar"; o usuário ainda decide
-    # via selectbox, isto é só uma dica visual pra agilizar.
-    sugestao_html = ""
-    sugestao = _sugerir_resultado(bet) if bet.resultado == ResultadoAposta.PENDENTE.value else None
-    if sugestao:
-        sugestao_class = "resultado-green" if sugestao == ResultadoAposta.GREEN.value else "resultado-red"
-        sugestao_label = "bateu (green)" if sugestao == ResultadoAposta.GREEN.value else "não bateu (red)"
-        sugestao_html = (
-            f'<div class="sugestao-conferencia {sugestao_class}">'
-            f'🔍 Conferência automática: sua aposta {sugestao_label}</div>'
         )
 
     # Logos reais das casas com link exato/aproximado — uma linha só, botão
@@ -719,7 +734,6 @@ def _bet_card(bet: Bet) -> None:
         f'<div class="info-item"><div class="info-label">Data/Hora</div><div class="info-valor">{data_txt}</div></div>'
         f'</div>'
         f'{placar_html}'
-        f'{sugestao_html}'
         f'{links_html}'
         f'</div>'
     )
@@ -800,8 +814,11 @@ def main() -> None:
         )
     # remove duplicatas (caso um bet apareça em mais de um filtro) e ordena por data
     apostas_unicas = {b.id: b for b in apostas}.values()
+    # data_hora vem timezone-aware (UTC) do banco — datetime.max é naive, e
+    # comparar os dois quebra com TypeError; precisa do mesmo tipo aqui.
+    _sem_data = datetime.max.replace(tzinfo=timezone.utc)
     apostas_ordenadas = sorted(
-        apostas_unicas, key=lambda b: b.data_hora or datetime.max
+        apostas_unicas, key=lambda b: b.data_hora or _sem_data
     )
 
     stats = _calcular_estatisticas(apostas_ordenadas)
@@ -817,7 +834,7 @@ def main() -> None:
             ("✅ Green", str(stats["green"]), None),
             ("❌ Red", str(stats["red"]), None),
             (
-                "Unidades (líquido)",
+                "Unidades",
                 f"{stats['unidades_liquidas']:+.2f}",
                 f"ROI {stats['roi']:.1f}%" if stats["roi"] is not None else None,
             ),
@@ -841,8 +858,17 @@ def main() -> None:
         st.info("Nenhuma aposta encontrada com os filtros atuais. Ajuste os filtros na barra lateral.")
         return
 
-    for bet in apostas_ordenadas:
-        _bet_card(bet)
+    # 2 jogos por linha no desktop pra aproveitar melhor o espaço horizontal
+    # (o media query mobile força de volta pra 1 coluna — ver CSS de
+    # stHorizontalBlock em _inject_css). st.columns aninhado dentro de
+    # cada _bet_card (o editor de status/resultado) funciona normalmente
+    # aqui, é só mais 1 nível de aninhamento.
+    for i in range(0, len(apostas_ordenadas), 2):
+        par = apostas_ordenadas[i:i + 2]
+        colunas = st.columns(2)
+        for coluna, bet in zip(colunas, par):
+            with coluna:
+                _bet_card(bet)
 
 
 if __name__ == "__main__":
