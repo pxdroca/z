@@ -263,6 +263,7 @@ def _inject_css() -> None:
            controlar quebra de linha do mercado e ser 100% responsivo.
         --------------------------------------------------------------- */
         .bet-card {
+            position: relative;
             background: var(--card-bg);
             border: 1px solid var(--card-border);
             border-radius: 16px;
@@ -353,11 +354,20 @@ def _inject_css() -> None:
             font-weight: 700;
         }
 
-        /* Placar parcial ao vivo — canto inferior direito dos badges de
-           status (pedido do usuário), sem o "venceu" (a partida ainda não
-           acabou). Cor neutra pra não competir visualmente com o badge
-           vermelho "Ao vivo" logo acima. */
+        /* Placar parcial ao vivo — canto inferior direito do CARD (pedido
+           do usuário: separado dos badges de status, que ficam no topo),
+           sem o "venceu" (a partida ainda não acabou). Cor neutra pra não
+           competir visualmente com o badge vermelho "Ao vivo" no topo.
+           padding-bottom extra no card (ver .bet-card.com-placar-ao-vivo)
+           abre espaço abaixo dos botões de casa de apostas pra não ficar
+           sobreposto/cortado por eles. */
+        .bet-card.com-placar-ao-vivo {
+            padding-bottom: 2.6rem;
+        }
         .bet-card .placar-ao-vivo {
+            position: absolute;
+            right: 1.3rem;
+            bottom: 0.85rem;
             font-family: 'JetBrains Mono', monospace;
             font-weight: 700;
             font-size: 0.85rem;
@@ -423,17 +433,38 @@ def _inject_css() -> None:
             width: auto !important;
             left: auto !important;
         }
+        /* Ícone de lápis/X — SVG de contorno (linha fina, estilo
+           Notion/Linear) via background-image, não emoji. O texto do
+           botão (label=" ", vazio de verdade) fica escondido com
+           font-size:0 pra não deixar nenhum espaço/caractere visível. */
         div[class*="st-key-card_"] [data-testid="stButton"] button {
-            background: transparent !important;
+            background-color: transparent !important;
+            background-repeat: no-repeat !important;
+            background-position: center !important;
+            background-size: 15px 15px !important;
             border: none !important;
-            color: var(--muted) !important;
-            font-size: 0.95rem !important;
-            padding: 0.1rem 0.3rem !important;
+            font-size: 0 !important;
+            width: 1.7rem !important;
+            height: 1.7rem !important;
             min-height: 0 !important;
-            line-height: 1 !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+            opacity: 0.75;
         }
         div[class*="st-key-card_"] [data-testid="stButton"] button:hover {
-            color: var(--lime) !important;
+            opacity: 1;
+        }
+        div[class*="st-key-toggle_editor_open_"] button {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa0ac' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3Cpath d='m15 5 4 4'/%3E%3C/svg%3E") !important;
+        }
+        div[class*="st-key-toggle_editor_open_"] button:hover {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d7f24d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3Cpath d='m15 5 4 4'/%3E%3C/svg%3E") !important;
+        }
+        div[class*="st-key-toggle_editor_close_"] button {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa0ac' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") !important;
+        }
+        div[class*="st-key-toggle_editor_close_"] button:hover {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d7f24d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") !important;
         }
 
         /* ---------------------------------------------------------------
@@ -811,14 +842,19 @@ def _bet_card(bet: Bet) -> None:
     editando_key = f"editando_{bet.id}"
     editando = st.session_state.get(editando_key, False)
 
-    # Placar parcial ao vivo (canto inferior direito, abaixo dos badges de
-    # status — pedido do usuário) — só quando a partida está rolando de
-    # verdade (status ao_vivo) e o SofaScore já reportou algum set jogado.
-    placar_ao_vivo_html = ""
-    if bet.status == BetStatus.AO_VIVO.value and bet.placar_final:
-        placar_ao_vivo_html = f'<div class="placar-ao-vivo">{bet.placar_final}</div>'
+    # Placar parcial ao vivo — canto inferior direito do card (pedido do
+    # usuário: separado dos badges de status, que ficam no topo), via
+    # position:absolute sobre o .bet-card. Só quando a partida está
+    # rolando de verdade (status ao_vivo) e o SofaScore já reportou algum
+    # set jogado.
+    tem_placar_ao_vivo = bet.status == BetStatus.AO_VIVO.value and bool(bet.placar_final)
+    placar_ao_vivo_html = f'<div class="placar-ao-vivo">{bet.placar_final}</div>' if tem_placar_ao_vivo else ""
 
-    card_classe = "bet-card com-editor-aberto" if editando else "bet-card"
+    card_classe = "bet-card"
+    if editando:
+        card_classe += " com-editor-aberto"
+    if tem_placar_ao_vivo:
+        card_classe += " com-placar-ao-vivo"
     card_html = (
         f'<div class="{card_classe}">'
         f'<div class="card-header-row">'
@@ -826,7 +862,6 @@ def _bet_card(bet: Bet) -> None:
         f'<div class="badges-row">'
         f'<span class="status-badge {status_badge_class}">{status_label}</span>'
         f'<span class="resultado-badge {resultado_badge_class}">{resultado_label}</span>'
-        f'{placar_ao_vivo_html}'
         f'</div>'
         f'</div>'
         f'<div class="torneio">{bet.torneio or "Torneio não identificado"}</div>'
@@ -837,6 +872,7 @@ def _bet_card(bet: Bet) -> None:
         f'<div class="info-item"><div class="info-label">Unidades</div><div class="info-valor">{bet.unidades:.1f}</div></div>'
         f'<div class="info-item"><div class="info-label">Data/Hora</div><div class="info-valor">{data_txt}</div></div>'
         f'</div>'
+        f'{placar_ao_vivo_html}'
         f'{placar_html}'
         f'{links_html}'
         f'</div>'
@@ -852,13 +888,21 @@ def _bet_card(bet: Bet) -> None:
     with st.container(key=f"card_{bet.id}"):
         st.markdown(card_html, unsafe_allow_html=True)
 
-        if st.button(
-            "✏️" if not editando else "✕",
-            key=f"toggle_editor_{bet.id}",
-            help="Editar status/resultado",
-        ):
-            st.session_state[editando_key] = not editando
-            st.rerun()
+        # Dois botões com keys fixas e distintas (um por estado, só um
+        # renderizado por vez) — permite CSS simples e óbvio pra cada
+        # ícone (ver _inject_css: .st-key-toggle_editor_open_<id>::before
+        # = lápis; .st-key-toggle_editor_close_<id>::before = X), ambos em
+        # SVG de linha fina inline, não emoji (pedido do usuário). Label
+        # vazio (só espaço — Streamlit exige texto não-vazio) porque o
+        # ícone visível é 100% CSS.
+        if not editando:
+            if st.button(" ", key=f"toggle_editor_open_{bet.id}", help="Editar status/resultado"):
+                st.session_state[editando_key] = True
+                st.rerun()
+        else:
+            if st.button(" ", key=f"toggle_editor_close_{bet.id}", help="Fechar edição"):
+                st.session_state[editando_key] = False
+                st.rerun()
 
         if editando:
             with st.container(key=f"editor_{bet.id}"):
