@@ -94,10 +94,10 @@ def _fetch_games(page: Page, dia: datetime) -> list[dict]:
         return []
 
 
-def _placar_dos_sets(stages: list[dict]) -> Optional[str]:
-    """Monta "6-4, 3-6, 7-5" a partir de stages tipo {name: "1º set",
-    homeCompetitorScore, awayCompetitorScore} — só sets já com placar
-    (score >= 0; sets ainda não jogados vêm com -1)."""
+def _sets_das_stages(stages: list[dict]) -> list[tuple[int, int]]:
+    """Lista de (games_home, games_away) por set, a partir de stages tipo
+    {name: "1º set", homeCompetitorScore, awayCompetitorScore} — só sets já
+    com placar (score >= 0; sets ainda não jogados vêm com -1)."""
     sets = []
     for stage in sorted(stages, key=lambda s: s.get("id", 0)):
         m = _SET_STAGE_PATTERN.match(stage.get("name", ""))
@@ -106,8 +106,13 @@ def _placar_dos_sets(stages: list[dict]) -> Optional[str]:
         h, a = stage.get("homeCompetitorScore"), stage.get("awayCompetitorScore")
         if h is None or a is None or h < 0 or a < 0:
             continue
-        sets.append(f"{int(h)}-{int(a)}")
-    return ", ".join(sets) if sets else None
+        sets.append((int(h), int(a)))
+    return sets
+
+
+def _placar_dos_sets(sets: list[tuple[int, int]]) -> Optional[str]:
+    """Monta "6-4, 3-6, 7-5" a partir da lista de sets estruturada."""
+    return ", ".join(f"{h}-{a}" for h, a in sets) if sets else None
 
 
 def _game_to_status(game: dict) -> EventStatus:
@@ -129,10 +134,12 @@ def _game_to_status(game: dict) -> EventStatus:
         elif away.get("isWinner"):
             vencedor = "away"
 
+    sets = _sets_das_stages(game.get("stages") or [])
     return EventStatus(
         status=status,
-        placar=_placar_dos_sets(game.get("stages") or []),
+        placar=_placar_dos_sets(sets),
         vencedor=vencedor,
+        sets=sets,
         jogador1_nome=home.get("name"),
         jogador2_nome=away.get("name"),
     )

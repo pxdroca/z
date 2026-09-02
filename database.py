@@ -317,14 +317,31 @@ def list_unmatched_bets() -> list[Bet]:
     return [_row_to_bet(r) for r in rows]
 
 
-def update_score_result(bet_id: int, status: str, placar_final: Optional[str] = None, vencedor_partida: Optional[str] = None) -> None:
+def update_score_result(
+    bet_id: int,
+    status: str,
+    placar_final: Optional[str] = None,
+    vencedor_partida: Optional[str] = None,
+    resultado: Optional[str] = None,
+) -> None:
     """Usado por score_updater.py para promover o status (ex: agendada -> ao_vivo)
-    e, quando a partida termina, gravar o placar final e o vencedor junto."""
+    e, quando a partida termina, gravar o placar final e o vencedor junto.
+
+    `resultado` (green/red) é opcional: só é passado quando
+    resultado_checker.checar_resultado() conseguiu interpretar o mercado com
+    segurança (ver score_updater.py) — se None, o campo `resultado` no banco
+    fica como já estava (pendente até o usuário confirmar manualmente)."""
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE bets SET status = %s, placar_final = %s, vencedor_partida = %s WHERE id = %s",
-            (status, placar_final, vencedor_partida, bet_id),
-        )
+        if resultado is not None:
+            conn.execute(
+                "UPDATE bets SET status = %s, placar_final = %s, vencedor_partida = %s, resultado = %s WHERE id = %s",
+                (status, placar_final, vencedor_partida, resultado, bet_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE bets SET status = %s, placar_final = %s, vencedor_partida = %s WHERE id = %s",
+                (status, placar_final, vencedor_partida, bet_id),
+            )
 
 
 def get_sync_state(key: str) -> Optional[str]:

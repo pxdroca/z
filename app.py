@@ -32,10 +32,10 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
+import resultado_checker
 from config import settings
 from database import auto_promote_ao_vivo, init_db, list_bets, update_resultado, update_status
 from models import Bet, BetStatus, ResultadoAposta
-from nameutils import names_match
 
 logger = logging.getLogger("app")
 
@@ -95,24 +95,20 @@ BOOKMAKER_BADGES = {
 
 def _sugerir_resultado(bet: Bet) -> str | None:
     """
-    Quando a partida termina e o mercado é do tipo "{Nome} ganhar" (o único
-    padrão que o extractor.py monta automaticamente hoje — ver
-    extractor.py::_infer_market_from_favorite), compara o vencedor real da
-    partida com o nome citado no mercado e sugere green/red.
+    Sugestão de green/red pra apostas que por algum motivo ainda estão
+    "pendente" apesar do jogo já ter terminado — normalmente o
+    score_updater.py já grava isso sozinho assim que a partida encerra (ver
+    resultado_checker.checar_resultado), então esta função só serve de
+    fallback (ex: aposta processada antes dessa gravação automática existir).
 
-    Só uma SUGESTÃO exibida no card — quem confirma é sempre o usuário
-    (novo_resultado no selectbox), nunca grava sozinho. Mercados que não
-    seguem esse padrão (handicap, games, sets) não têm como ser inferidos
-    automaticamente, então não sugerem nada (None).
+    Mesma lógica central de resultado_checker.py (vencedor de partida,
+    vencedor de set específico/genérico, vencer sem perder set) — só uma
+    SUGESTÃO exibida no card, quem confirma é sempre o usuário
+    (novo_resultado no selectbox), nunca grava sozinho aqui. Mercados que
+    resultado_checker.py não sabe interpretar (aces, games, dupla falta,
+    placar exato) não sugerem nada (None).
     """
-    if not bet.placar_final or not bet.vencedor_partida or not bet.mercado:
-        return None
-    if not bet.mercado.lower().endswith("ganhar"):
-        return None
-    jogador_citado = bet.mercado.rsplit(" ", 1)[0].strip()
-    if names_match(jogador_citado, bet.vencedor_partida, threshold=80):
-        return ResultadoAposta.GREEN.value
-    return ResultadoAposta.RED.value
+    return resultado_checker.checar_resultado_de_bet(bet)
 
 
 def _log_debug_info(bet: Bet) -> None:

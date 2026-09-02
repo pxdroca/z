@@ -43,10 +43,11 @@ import time
 from datetime import datetime
 from typing import Optional
 
+import resultado_checker
 from config import settings
 from database import init_db, list_trackable_bets, list_unmatched_bets, update_match_info, update_score_result
 from matcher import find_match
-from models import Bet, BetStatus
+from models import Bet, BetStatus, ResultadoAposta
 from notifier import send_plain_message
 from scores365_client import find_status_by_names
 from sofascore_client import EventStatus, get_event_status
@@ -108,36 +109,39 @@ def _consultar_status(bet: Bet) -> Optional[EventStatus]:
     return evt
 
 
-def _processar_bet(bet: Bet) -> Optional[str]:
-    """Devolve o texto de notificação a enviar (partida encerrada), ou None
-    se não há nada a notificar. Não envia a notificação aqui — ver run_once,
-    que acumula os textos de todo o ciclo e manda todos juntos num único
-    asyncio.run() (chamar asyncio.run() uma vez por partida, dentro deste
-    loop síncrono, esgotava o pool de conexões HTTP do bot do Telegram —
-    _get_bot() em notifier.py cacheia o Bot/httpx.AsyncClient entre
-    chamadas, e cada asyncio.run() novo cria um event loop novo, incompatível
-    com um client já vinculado ao loop anterior — bug real visto em
-    produção: TimedOut/PoolTimeout ao notificar mais de 1 partida por ciclo)."""
-    evt = _consultar_status(bet)
-    if evt is None:
-        logger.warning("Aposta #%s: falha ao consultar evento %s (SofaScore e 365scores), tentando de novo no próximo ciclo.", bet.id, bet.sofascore_event_id)
-        return None
+def _formata_placar_por_linha(evt: EventStatus) -> str:
+    """"6-4\n3-6\n6-2" em vez de "6-4, 3-6, 6-2" — mais legível na
+    notificação do Telegram (ver formato pedido pelo usuário)."""
+    if not evt.sets:
+        return evt.placar or "(placar indisponível)"
+    return "\n".join(f"Set {i}: {h}-{a}" for i, (h, a) in enumerate(evt.sets, start=1))
 
+
+def _resultado_emoji(resultado: Optional[str]) -> str:
+    if resultado == ResultadoAposta.GREEN.value:
+        return "✅ Green (bateu)"
+    if resultado == ResultadoAposta.RED.value:
+        return "❌ Red (não bateu)"
+    return "⏳ Confira manualmente (mercado não reconhecido automaticamente)"
+
+
+def _processar_bet(bet: Bet, evt: EventStatus) -> None:
+    """Atualiza o status/resultado da aposta no banco a partir do EventStatus
+    já consultado (ver _processar_jogo, que consulta 1x por evento e chama
+    isto pra cada aposta daquele evento)."""
     if evt.status == "finished":
         vencedor = _vencedor_nome(bet, evt)
+        resultado = resultado_checker.checar_resultado(bet.mercado, bet.jogador1, bet.jogador2, evt)
         update_score_result(
             bet.id,
             status=BetStatus.ENCERRADA.value,
             placar_final=evt.placar,
             vencedor_partida=vencedor,
+            resultado=resultado,
         )
-        logger.info("Aposta #%s: partida encerrada — %s venceu %s", bet.id, vencedor, evt.placar)
-
-        odd_txt = f"{bet.odd:.2f}" if bet.odd is not None else "?"
-        return (
-            f"🏁 Partida encerrada: {vencedor or '?'} venceu {evt.placar or '(placar indisponível)'} — "
-            f"não esqueça de conferir se sua aposta ({bet.mercado or 'mercado não identificado'}, "
-            f"odd {odd_txt}) bateu."
+        logger.info(
+            "Aposta #%s: partida encerrada — %s venceu %s (resultado: %s)",
+            bet.id, vencedor, evt.placar, resultado or "não determinado",
         )
 
     elif evt.status == "inprogress" and bet.status == BetStatus.AGENDADA.value:
@@ -146,7 +150,23 @@ def _processar_bet(bet: Bet) -> Optional[str]:
 
     else:
         logger.debug("Aposta #%s: sem mudança (status SofaScore=%s)", bet.id, evt.status)
-    return None
+
+
+def _monta_notificacao_encerrada(apostas: list[Bet], evt: EventStatus) -> str:
+    """
+    1 notificação por JOGO (não por aposta) — se houver mais de 1 aposta no
+    mesmo confronto (ex: "vencedor da partida" feita antes + "vencer o 2º
+    set" feita ao vivo depois), lista o resultado de cada uma junto, em vez
+    de mandar uma mensagem quase idêntica repetida. Ver run_once/
+    _processar_jogo, que agrupa por sofascore_event_id antes de chamar isto.
+    """
+    vencedor = _vencedor_nome(apostas[0], evt)
+    linhas = [f"🏁 Partida encerrada: {vencedor or '?'} venceu", "", _formata_placar_por_linha(evt), ""]
+    for bet in apostas:
+        resultado = resultado_checker.checar_resultado(bet.mercado, bet.jogador1, bet.jogador2, evt)
+        odd_txt = f"{bet.odd:.2f}" if bet.odd is not None else "?"
+        linhas.append(f"• {bet.mercado or 'mercado não identificado'} (odd {odd_txt}) — {_resultado_emoji(resultado)}")
+    return "\n".join(linhas)
 
 
 async def _enviar_notificacoes(textos: list[str]) -> None:
@@ -181,14 +201,34 @@ def run_once() -> int:
     encontradas. Devolve quantas foram processadas no total."""
     apostas = list_trackable_bets()
     logger.info("Ciclo iniciado: %d aposta(s) para acompanhar.", len(apostas))
-    notificacoes: list[str] = []
+
+    # Agrupa por sofascore_event_id: consulta o status 1x por JOGO (não 1x
+    # por aposta) — economiza chamadas de rede quando há mais de 1 aposta no
+    # mesmo confronto, e permite juntar todas numa única notificação (ver
+    # _monta_notificacao_encerrada) em vez de mandar 1 mensagem quase
+    # idêntica por aposta.
+    apostas_por_evento: dict[int, list[Bet]] = {}
     for bet in apostas:
+        apostas_por_evento.setdefault(bet.sofascore_event_id, []).append(bet)
+
+    notificacoes: list[str] = []
+    for event_id, apostas_do_evento in apostas_por_evento.items():
         try:
-            texto = _processar_bet(bet)
-            if texto:
-                notificacoes.append(texto)
+            evt = _consultar_status(apostas_do_evento[0])
+            if evt is None:
+                logger.warning(
+                    "Evento %s (%d aposta(s)): falha ao consultar SofaScore e 365scores, tentando de novo no próximo ciclo.",
+                    event_id, len(apostas_do_evento),
+                )
+                continue
+
+            for bet in apostas_do_evento:
+                _processar_bet(bet, evt)
+
+            if evt.status == "finished":
+                notificacoes.append(_monta_notificacao_encerrada(apostas_do_evento, evt))
         except Exception:
-            logger.exception("Erro ao processar aposta #%s (evento %s)", bet.id, bet.sofascore_event_id)
+            logger.exception("Erro ao processar evento %s (%d aposta(s))", event_id, len(apostas_do_evento))
         _polite_delay()
 
     if notificacoes:

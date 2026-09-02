@@ -43,7 +43,7 @@ import json
 import logging
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -86,6 +86,11 @@ class EventStatus:
     vencedor: Optional[str] = None  # "home" | "away" | None (só quando finished)
     jogador1_nome: Optional[str] = None  # homeTeam — útil pra montar a notificação sem outra consulta
     jogador2_nome: Optional[str] = None  # awayTeam
+    # Mesma informação de `placar`, mas estruturada: 1 tupla (games_home,
+    # games_away) por set já disputado, na ordem. Usado por score_updater.py
+    # pra descobrir quem ganhou um set específico (ex: conferir uma aposta
+    # "vencer o 2º set") sem precisar reparsear a string `placar`.
+    sets: list[tuple[int, int]] = field(default_factory=list)
 
 
 def _polite_delay() -> None:
@@ -351,10 +356,10 @@ _WINNER_CODE_HOME = 1
 _WINNER_CODE_AWAY = 2
 
 
-def _format_placar(home_score: dict, away_score: dict) -> Optional[str]:
-    """Monta "7-5, 3-6, 2-6, 4-2" a partir dos campos period1..period5 de
-    homeScore/awayScore — cada um é o placar de games de um set. Sets ainda
-    não jogados vêm ausentes/None e são ignorados."""
+def _extrair_sets(home_score: dict, away_score: dict) -> list[tuple[int, int]]:
+    """Lista de (games_home, games_away) por set, a partir dos campos
+    period1..period5 de homeScore/awayScore. Sets ainda não jogados vêm
+    ausentes/None e são ignorados."""
     sets = []
     for i in range(1, 6):  # tênis tem no máximo 5 sets
         chave = f"period{i}"
@@ -362,8 +367,13 @@ def _format_placar(home_score: dict, away_score: dict) -> Optional[str]:
         a = away_score.get(chave)
         if h is None or a is None:
             continue
-        sets.append(f"{h}-{a}")
-    return ", ".join(sets) if sets else None
+        sets.append((int(h), int(a)))
+    return sets
+
+
+def _format_placar(sets: list[tuple[int, int]]) -> Optional[str]:
+    """Monta "7-5, 3-6, 2-6, 4-2" a partir da lista de sets estruturada."""
+    return ", ".join(f"{h}-{a}" for h, a in sets) if sets else None
 
 
 def get_event_status(event_id: int) -> Optional[EventStatus]:
@@ -393,7 +403,7 @@ def get_event_status(event_id: int) -> Optional[EventStatus]:
 
         home_score = evt.get("homeScore") or {}
         away_score = evt.get("awayScore") or {}
-        placar = _format_placar(home_score, away_score)
+        sets = _extrair_sets(home_score, away_score)
 
         vencedor = None
         if status_tipo == "finished":
@@ -405,10 +415,11 @@ def get_event_status(event_id: int) -> Optional[EventStatus]:
 
         return EventStatus(
             status=status_tipo,
-            placar=placar,
+            placar=_format_placar(sets),
             vencedor=vencedor,
             jogador1_nome=(evt.get("homeTeam") or {}).get("name"),
             jogador2_nome=(evt.get("awayTeam") or {}).get("name"),
+            sets=sets,
         )
 
     return _run_with_browser(_buscar)
