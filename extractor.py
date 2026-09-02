@@ -618,3 +618,37 @@ def extract_bet_info(image_path: Optional[str], caption_text: Optional[str] = No
             bet.jogador1, bet.jogador2, bet.torneio, bet.mercado, bet.odd, bet.confianca,
         )
     return bet
+
+
+# ==============================================================================
+# 4) AVISO DE CASH-OUT ANTECIPADO ("Fulano está pago!"/"...Cash")
+# ==============================================================================
+# Padrão real observado no grupo: o tipster avisa quando já deu cash-out numa
+# aposta em andamento, citando só o nome do jogador + "pago"/"cash" — não é
+# uma tip nova (sem mercado, sem odd, geralmente sem imagem), é a confirmação
+# de que aquela aposta específica já foi resolvida como green, mesmo que o
+# jogador tome a virada depois (o resultado real do jogo deixa de importar,
+# ver models.ResultadoAposta.CASHOUT). Ex. reais: "Zheng está pago! Cash",
+# "Merida está pago! Cash".
+_CASHOUT_PATTERN = re.compile(
+    r"^([A-ZÀ-Ú][\wÀ-ú.'\-]+(?:[ \t]+[A-ZÀ-Ú][\wÀ-ú.'\-]+){0,2}?)"
+    r"\s+(?:est[áa]|ta|tá)?\s*pago!?\s*(?:cash)?\b",
+    re.IGNORECASE,
+)
+
+
+def detectar_aviso_cashout(texto: str) -> Optional[str]:
+    """
+    Devolve o nome do jogador citado se `texto` for um aviso de cash-out
+    antecipado (ex: "Zheng está pago! Cash"), ou None se não bater com esse
+    padrão específico — deliberadamente estreito (só "Nome [está] pago[!]
+    [Cash]" no início da mensagem) pra não confundir com outros usos da
+    palavra "cash" no grupo (ex: convites promocionais mencionando
+    "cashout" no meio de um texto mais longo, que não são avisos de
+    resultado de uma aposta específica).
+    """
+    texto = (texto or "").strip()
+    m = _CASHOUT_PATTERN.match(texto)
+    if not m:
+        return None
+    return m.group(1).strip()

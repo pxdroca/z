@@ -49,6 +49,14 @@ class ResultadoAposta(str, Enum):
     GREEN = "green"
     RED = "red"
     VOID = "void"
+    # Tipster deu cash-out antecipado ("Fulano está pago!"/"...Cash") antes
+    # do jogo terminar — green garantido por definição, mesmo que o
+    # jogador tome a virada depois (o resultado REAL do mercado deixa de
+    # importar). Distinto de GREEN comum pra deixar isso explícito no
+    # painel (ver STATUS_CSS_CLASS/RESULTADO_LABELS em app.py) — sem essa
+    # distinção, um green por cashout pareceria indistinguível de um green
+    # "de verdade" batido até o fim do jogo.
+    CASHOUT = "cashout"
 
 
 @dataclass

@@ -280,6 +280,22 @@ def auto_promote_ao_vivo() -> int:
         return cur.rowcount
 
 
+def list_apostas_ativas() -> list[Bet]:
+    """
+    Apostas ainda em jogo (agendada/ao_vivo), independente de ter
+    sofascore_event_id — usado por listener.py pra casar um aviso de
+    cash-out antecipado do tipster ("Fulano está pago!"/"...Cash") com a
+    aposta daquele jogador, por nome (ver nameutils.names_match), já que
+    esse aviso não cita o event_id nem o mercado, só o nome."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT * FROM bets WHERE status IN (%s, %s)",
+            (BetStatus.AGENDADA.value, BetStatus.AO_VIVO.value),
+        )
+        rows = cur.fetchall()
+    return [_row_to_bet(r) for r in rows]
+
+
 def list_trackable_bets() -> list[Bet]:
     """
     Apostas que score_updater.py deve consultar no SofaScore: ainda não

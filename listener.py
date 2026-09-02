@@ -67,10 +67,19 @@ from telethon.sessions import StringSession
 from telethon.tl.custom.message import Message
 
 from config import settings
-from database import bet_exists_for_message, get_sync_state, init_db, insert_bet, set_sync_state
-from extractor import extract_bet_info
+from database import (
+    bet_exists_for_message,
+    get_sync_state,
+    init_db,
+    insert_bet,
+    list_apostas_ativas,
+    set_sync_state,
+    update_resultado,
+)
+from extractor import detectar_aviso_cashout, extract_bet_info
 from matcher import build_enabled_adapters, find_match
-from models import Bet, BetStatus, ExtractedBet, MatchInfo, TipoAposta
+from models import Bet, BetStatus, ExtractedBet, MatchInfo, ResultadoAposta, TipoAposta
+from nameutils import names_match
 from notifier import send_bet_notification, send_plain_message
 
 # Chave usada em sync_state (database.py) para lembrar até onde o polling já
@@ -169,6 +178,50 @@ async def _resolve_source_chat(client: TelegramClient):
     return mais_recente.entity
 
 
+async def _processar_aviso_cashout(mensagem_id: int, nome_citado: str, caption: str) -> None:
+    """
+    Casa o nome citado num aviso de cash-out ("Fulano está pago!") com
+    apostas em andamento (agendada/ao_vivo) daquele jogador — pode haver mais
+    de uma (ex: pré-jogo "vencedor da partida" + ao vivo "vencer o 2º set"
+    no mesmo confronto, como já visto em produção), e TODAS batem como
+    green/cashout: o aviso é sobre o jogador ter sido "pago" no geral, o
+    tipster não costuma discriminar qual aposta específica foi encerrada.
+
+    Salva de qualquer forma um registro erro_extracao pra essa mensagem
+    (idempotência via bet_exists_for_message / auditoria), independente de
+    ter achado alguma aposta pra casar ou não.
+    """
+    ativas = list_apostas_ativas()
+    casadas = [b for b in ativas if names_match(nome_citado, b.jogador1, threshold=80) or names_match(nome_citado, b.jogador2, threshold=80)]
+
+    for bet in casadas:
+        update_resultado(bet.id, ResultadoAposta.CASHOUT.value)
+        logger.info("Aposta #%s: cash-out antecipado confirmado pelo tipster (%r).", bet.id, nome_citado)
+
+    if casadas:
+        nomes = ", ".join(f"{b.jogo} ({b.mercado or '?'})" for b in casadas)
+        await send_plain_message(f"💰 Cash-out confirmado pelo tipster — {nomes}")
+    else:
+        logger.warning(
+            "Aviso de cash-out (%r) não casou com nenhuma aposta ativa. Texto: %r",
+            nome_citado, caption[:200],
+        )
+
+    # Salva um registro de auditoria (não é uma tip nova, mas idempotência
+    # via bet_exists_for_message depende de toda mensagem processada deixar
+    # um rastro no banco — senão reprocessaria esse aviso indefinidamente).
+    bet_registro = Bet(
+        jogador1=nome_citado,
+        jogador2="?",
+        mercado=f"[aviso de cash-out — {len(casadas)} aposta(s) casada(s)]",
+        status=BetStatus.ERRO_EXTRACAO.value,
+        fonte_texto=caption,
+        mensagem_id=mensagem_id,
+        unidades=1.0,
+    )
+    insert_bet(bet_registro)
+
+
 async def process_message(message: Message) -> None:
     """
     Núcleo do pipeline: roda para cada mensagem nova (ou de backfill).
@@ -189,6 +242,20 @@ async def process_message(message: Message) -> None:
     if not caption and not image_path:
         logger.debug("Mensagem %s sem texto nem imagem, ignorando.", message.id)
         return
+
+    # --- aviso de cash-out antecipado ("Fulano está pago!"/"...Cash") ------
+    # Só quando não há imagem (o padrão real observado é sempre texto puro
+    # solto no grupo, nunca junto de um print) — ver
+    # extractor.detectar_aviso_cashout para o porquê e os exemplos reais.
+    # Não é uma tip nova: casa por nome com uma aposta já em andamento
+    # (agendada/ao_vivo) e marca resultado=cashout na hora, sem esperar o
+    # jogo terminar — o tipster já confirmou green por cash-out, ganhe ou
+    # perca o jogador depois.
+    if caption and not image_path:
+        nome_citado = detectar_aviso_cashout(caption)
+        if nome_citado:
+            await _processar_aviso_cashout(message.id, nome_citado, caption)
+            return
 
     # --- extractor.py -----------------------------------------------------
     # extract_bet_info é síncrono e pesado (OCR local via EasyOCR/torch) —

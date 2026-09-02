@@ -57,6 +57,7 @@ RESULTADO_LABELS = {
     ResultadoAposta.GREEN.value: "✅ Green",
     ResultadoAposta.RED.value: "❌ Red",
     ResultadoAposta.VOID.value: "➖ Void",
+    ResultadoAposta.CASHOUT.value: "💰 Cashout",
 }
 
 # Classe CSS por resultado — ver _inject_css() para as cores reais
@@ -66,6 +67,10 @@ RESULTADO_CSS_CLASS = {
     ResultadoAposta.RED.value: "resultado-red",
     ResultadoAposta.VOID.value: "resultado-void",
     ResultadoAposta.PENDENTE.value: "resultado-pendente",
+    # Cor própria (não verde comum) — deixa explícito no painel que foi
+    # cash-out antecipado, não o mercado batendo até o fim do jogo (pedido
+    # do usuário: "precisar ficar explícito no painel, como cashout").
+    ResultadoAposta.CASHOUT.value: "resultado-cashout",
 }
 
 STATUS_CSS_CLASS = {
@@ -405,6 +410,10 @@ def _inject_css() -> None:
         .resultado-red { background: rgba(239,68,68,0.16); color: var(--red); }
         .resultado-void { background: rgba(154,160,172,0.16); color: var(--muted); }
         .resultado-pendente { background: rgba(215,242,77,0.14); color: var(--lime); }
+        /* Âmbar/dourado — deliberadamente diferente do verde comum, pra não
+           parecer um green "batido até o fim do jogo" (ver
+           models.ResultadoAposta.CASHOUT). */
+        .resultado-cashout { background: rgba(245,158,11,0.16); color: #f59e0b; }
 
         /* ---------------------------------------------------------------
            Wrapper do card inteiro (HTML do card + botão de lápis + editor
@@ -753,11 +762,19 @@ def _header_e_filtros() -> tuple[list[str], date, date]:
 def _calcular_estatisticas(apostas: list[Bet]) -> dict:
     """
     Estatísticas sobre o conjunto filtrado, baseadas no campo `resultado`
-    (green/red/void/pendente) — definido manualmente pelo usuário, não pelo
-    pipeline. Void e pendente não entram em taxa de acerto/ROI (não houve
+    (green/red/void/pendente/cashout) — definido manualmente pelo usuário
+    (ou automaticamente no caso de cashout, ver listener.py::
+    _processar_aviso_cashout), não pelo pipeline de conferência de
+    mercado. Void e pendente não entram em taxa de acerto/ROI (não houve
     ganho/perda real a contabilizar).
-    """
-    green = [b for b in apostas if b.resultado == ResultadoAposta.GREEN.value]
+
+    Cashout entra nas contas junto com green (lucro pela odd cheia) por
+    simplicidade — na prática o valor recebido no cash-out costuma ser
+    menor que o lucro da odd cheia, então isso superestima um pouco o
+    lucro real dessas apostas específicas (decisão consciente: registrar
+    o valor exato do cash-out exigiria um campo novo/input manual, fora
+    de escopo por ora)."""
+    green = [b for b in apostas if b.resultado in (ResultadoAposta.GREEN.value, ResultadoAposta.CASHOUT.value)]
     red = [b for b in apostas if b.resultado == ResultadoAposta.RED.value]
     void = [b for b in apostas if b.resultado == ResultadoAposta.VOID.value]
     pendente = [b for b in apostas if b.resultado == ResultadoAposta.PENDENTE.value]
