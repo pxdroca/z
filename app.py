@@ -33,13 +33,12 @@ import pandas as pd
 import streamlit as st
 
 import resultado_checker
-from config import settings
 from database import auto_promote_ao_vivo, init_db, list_bets, update_resultado, update_status
 from models import Bet, BetStatus, ResultadoAposta
 
 logger = logging.getLogger("app")
 
-st.set_page_config(page_title="Cansadão Apostas", page_icon="🎾", layout="wide")
+st.set_page_config(page_title="Cansadão Apostas", page_icon="🎯", layout="wide")
 
 init_db()
 auto_promote_ao_vivo()  # atualiza 'agendada' -> 'ao_vivo' toda vez que o painel recarrega
@@ -181,12 +180,17 @@ def _inject_css() -> None:
            Header nativa do Streamlit (barra vazia com Deploy/menu ⋮) —
            some por completo; o app tem seu próprio cabeçalho (.app-header).
            Idem para a badge "Hosted with Streamlit"/"Manage app" (canto
-           inferior direito, id="ViewerBadge_container" no HTML real — o
-           seletor data-testid usado antes não pegava esse elemento) e o
-           menu de 3 pontos (⋮) do topo — só aparecem pro dono do app,
-           nunca pros visitantes, mas não têm função pro uso deste painel.
-           [class*=...] cobre variações de nome de classe que o Streamlit
-           muda entre versões, então é mais robusto que um único seletor.
+           inferior direito) e o avatar/perfil ao lado dela — só aparecem
+           pro dono do app, nunca pros visitantes, mas não têm função pro
+           uso deste painel.
+
+           No HTML real de produção (streamlit.app) o Streamlit Cloud usa
+           classes com hash de build (ex: "_viewerBadge_aycw8_23",
+           "_profileContainer_gzau3_53" — o hash muda a cada versão), e o
+           elemento raiz da badge é um <a>, não um <div> — por isso
+           "div[class*=viewerBadge]" nunca batia (restringia a tag errada).
+           Seletor sem restrição de tag + [class*=...] cobre o hash mudando
+           entre builds.
         --------------------------------------------------------------- */
         header[data-testid="stHeader"],
         div[data-testid="stToolbar"],
@@ -197,16 +201,18 @@ def _inject_css() -> None:
         .stAppDeployButton,
         [data-testid="stAppViewerBadge"],
         #ViewerBadge_container,
-        div[class*="viewerBadge"] {
+        [class*="viewerBadge"],
+        [class*="profileContainer"] {
             display: none !important;
         }
-        /* Botão de recolher/expandir a sidebar (a seta "‹"/"›" no canto
-           superior esquerdo) — mantém a função, só reposiciona pra não
-           flutuar solto sobre o conteúdo com um espaço vazio enorme acima
-           do header (era o que causava o espaçamento excessivo no topo). */
+        /* Botão de recolher/expandir a sidebar (a seta "‹"/"›") — movido
+           pro lado direito do header pra não disputar espaço visual com o
+           título (.app-header), que fica alinhado à esquerda. */
         div[data-testid="stSidebarCollapsedControl"],
         button[data-testid="stBaseButton-headerNoPadding"] {
             top: 0.6rem !important;
+            left: auto !important;
+            right: 1rem !important;
         }
         div[data-testid="stAppViewContainer"] > div:first-child {
             padding-top: 0.5rem;
@@ -548,6 +554,12 @@ def _inject_css() -> None:
            empilhar em vez de espremer.
         --------------------------------------------------------------- */
         @media (max-width: 640px) {
+            /* No mobile a sidebar já nasce colapsada e a barra nativa do
+               Streamlit some — o padding-top pensado pro desktop (pra não
+               ficar embaixo da seta "‹"/"›") sobra como espaço vazio aqui,
+               então reduz bem mais nesse breakpoint. */
+            .main .block-container { padding-top: 1rem !important; }
+
             .app-header { font-size: 1.6rem; }
 
             .bet-card { padding: 0.85rem 0.9rem; }
@@ -574,21 +586,8 @@ def _inject_css() -> None:
     )
 
 
-def _db_host_label() -> str:
-    """Só o host do Postgres (nunca a connection string inteira, que carrega
-    senha) — exibido na sidebar como referência de qual banco está ativo."""
-    url = settings.DATABASE_URL
-    if not url:
-        return "não configurado"
-    # postgresql://user:pass@host/db?... -> host
-    sem_esquema = url.split("://", 1)[-1]
-    sem_credenciais = sem_esquema.split("@", 1)[-1]
-    host = sem_credenciais.split("/", 1)[0]
-    return host
-
-
 def _sidebar_filters() -> tuple[list[str], date, date]:
-    st.sidebar.title("🎾 Filtros")
+    st.sidebar.title("Filtros")
 
     status_opcoes = list(STATUS_LABELS.keys())
     status_labels_sel = st.sidebar.multiselect(
@@ -612,7 +611,6 @@ def _sidebar_filters() -> tuple[list[str], date, date]:
     if st.sidebar.button("🔄 Atualizar agora"):
         st.rerun()
 
-    st.sidebar.caption(f"Banco: `{_db_host_label()}`")
     return status_selecionados, data_de, data_ate
 
 

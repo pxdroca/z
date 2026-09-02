@@ -10,7 +10,15 @@ on:
 jobs:
   update-scores:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    # 4 min estava curto demais: setup do Python + install de dependências +
+    # "playwright install --with-deps chromium" (1-2 min sozinho) + o ciclo
+    # em si (delays deliberados de 1-3s entre cada evento/retry consultado,
+    # ver _polite_delay em score_updater.py) — runs reais estavam sendo
+    # canceladas pelo próprio timeout no meio do ciclo, sem terminar de
+    # gravar/retentar as apostas (ex: retry de "não encontrada" ficava pra
+    # trás). Como o cron roda a cada 5 min de qualquer forma, um timeout
+    # maior aqui não empilha runs de forma grave.
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
