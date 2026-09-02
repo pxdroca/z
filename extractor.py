@@ -72,6 +72,17 @@ qualquer sub-odd individual). Sinais de múltipla: cabeçalho tipo "N SELEÇÕES
 "SIMPLES • N" (esse "SIMPLES" ali é o TIPO de aposta de cada perna individual,
 não quer dizer que a aposta toda tem 1 jogo só), ou texto "+N seleções mais".
 
+IMPORTANTE — nem toda mensagem do grupo é uma tip nova. Mensagens como
+"Zheng está pago! Cash", "Merida está pago!", avisos de resultado (green/red),
+resumos do dia (ex: "12 Greens, 6 Reds"), ou comentários soltos ("Faltam buse
+e zheng pra gente fechar hoje") citam nomes de jogadores mas NÃO são uma aposta
+nova — não têm imagem de bet-slip nenhuma, só texto solto. Se não houver
+imagem anexada E o texto não citar uma odd numérica explícita, NÃO invente
+jogador1/mercado a partir de um nome solto no texto: devolva jogador1 null e
+mercado null (tipo_aposta "simples", odd null se não achar). Só preencha
+jogador1/mercado a partir de texto puro (sem imagem) quando houver uma odd
+numérica clara acompanhando o nome (ex: "Hurkacz odd: 2.85").
+
 Responda SOMENTE com um JSON válido, sem markdown, sem comentários, no formato
 exato:
 
@@ -181,18 +192,34 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
             confianca=0.7 if (odd is not None and selecoes) else 0.4,
         )
 
-    if data.get("jogador1") and data.get("jogador2"):
+    jogador1 = data.get("jogador1")
+    jogador2 = data.get("jogador2")
+    mercado = data.get("mercado")
+
+    # Cinto de segurança determinístico (além da instrução no prompt, que
+    # LLMs às vezes não seguem à risca): mensagens sem imagem E sem odd
+    # explícita citando um nome de jogador não são confiavelmente uma tip
+    # nova — bug real visto em produção com "Zheng está pago! Cash" (aviso
+    # de resultado, não bet-slip) virando jogador1="Zheng", mercado=
+    # "Vencedor da partida" fabricados do nada. Sem imagem pra confirmar e
+    # sem odd, descarta.
+    if not image_path and odd is None:
+        jogador1 = None
+        jogador2 = None
+        mercado = None
+
+    if jogador1 and jogador2:
         confianca = 0.9
-    elif data.get("jogador1"):  # só o favorito, sem adversário — ainda válido, ver models.ExtractedBet.valido
+    elif jogador1:  # só o favorito, sem adversário — ainda válido, ver models.ExtractedBet.valido
         confianca = 0.6
     else:
         confianca = 0.3
 
     bet = ExtractedBet(
-        jogador1=data.get("jogador1"),
-        jogador2=data.get("jogador2"),
+        jogador1=jogador1,
+        jogador2=jogador2,
         torneio=data.get("torneio"),
-        mercado=data.get("mercado"),
+        mercado=mercado,
         odd=odd,
         texto_bruto=caption_text,
         confianca=confianca,
