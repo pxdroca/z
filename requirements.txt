@@ -32,7 +32,7 @@ beautifulsoup4==4.12.3
 
 # --- Dashboard web ---------------------------------------------------------------
 streamlit==1.40.2
-pandas==2.2.2
+pandas==2.2.3  # 2.2.2 não tem wheel pronto pra versões recentes de Python (Streamlit Cloud) — compila do source e falha
 
 # --- Utilidades gerais ------------------------------------------------------------
 python-dotenv==1.0.1
