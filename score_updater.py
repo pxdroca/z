@@ -201,8 +201,20 @@ def _retentar_bet_nao_encontrada(bet: Bet) -> None:
         return
 
     status = BetStatus.AO_VIVO.value if (match.data_hora and match.data_hora <= datetime.now()) else BetStatus.AGENDADA.value
-    update_match_info(bet.id, data_hora=match.data_hora, links=match.links, status=status)
-    logger.info("Aposta #%s: confronto encontrado no retry — %s x %s", bet.id, bet.jogador1, bet.jogador2)
+    update_match_info(
+        bet.id,
+        data_hora=match.data_hora,
+        links=match.links,
+        status=status,
+        sofascore_event_id=match.sofascore_event_id,
+        jogador1=match.jogador1_oficial or bet.jogador1,
+        jogador2=match.jogador2_oficial or bet.jogador2,
+        torneio=match.torneio_oficial,
+    )
+    logger.info(
+        "Aposta #%s: confronto encontrado no retry — %s x %s",
+        bet.id, match.jogador1_oficial or bet.jogador1, match.jogador2_oficial or bet.jogador2,
+    )
 
 
 def run_once() -> int:

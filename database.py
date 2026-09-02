@@ -187,13 +187,62 @@ def insert_bet(bet: Bet) -> int:
     return int(new_id)
 
 
-def update_match_info(bet_id: int, data_hora: Optional[datetime], links: dict, status: str) -> None:
-    """Chamado pelo listener.py depois do matcher.py achar (ou não) o confronto e os links."""
+def update_match_info(
+    bet_id: int,
+    data_hora: Optional[datetime],
+    links: dict,
+    status: str,
+    sofascore_event_id: Optional[int] = None,
+    jogador1: Optional[str] = None,
+    jogador2: Optional[str] = None,
+    torneio: Optional[str] = None,
+) -> None:
+    """Chamado pelo listener.py (achou o confronto na 1ª tentativa) e por
+    score_updater.py::_retentar_bet_nao_encontrada (achou no retry) depois
+    do matcher.py confirmar (ou não) o confronto e os links.
+
+    sofascore_event_id: bug real corrigido aqui — score_updater.py retentava
+    apostas "não encontrada" e atualizava data_hora/links/status com sucesso,
+    mas nunca persistia o event_id do match encontrado no retry. Sem isso, a
+    aposta nunca aparece em list_trackable_bets() (exige sofascore_event_id
+    IS NOT NULL) e fica "ao_vivo"/"agendada" para sempre, sem o
+    score_updater.py nunca mais conseguir consultar o placar/resultado dela
+    — encontrada uma vez, nunca mais rastreada depois.
+
+    jogador1/jogador2/torneio: opcionais, só passados pelo retry (o
+    listener.py na 1ª tentativa já grava isso via insert_bet) — sem eles o
+    retry deixava os nomes crus do OCR/tipster (ex: "Michael zheng", "?")
+    em vez dos nomes oficiais do SofaScore, mesmo já tendo confirmado o
+    confronto certo."""
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE bets SET data_hora = %s, links_json = %s, status = %s WHERE id = %s",
-            (data_hora.isoformat() if data_hora else None, json.dumps(links, ensure_ascii=False), status, bet_id),
-        )
+        if jogador1 is not None:
+            conn.execute(
+                """UPDATE bets
+                      SET data_hora = %s, links_json = %s, status = %s, sofascore_event_id = %s,
+                          jogador1 = %s, jogador2 = %s, torneio = COALESCE(%s, torneio)
+                    WHERE id = %s""",
+                (
+                    data_hora.isoformat() if data_hora else None,
+                    json.dumps(links, ensure_ascii=False),
+                    status,
+                    sofascore_event_id,
+                    jogador1,
+                    jogador2 or "?",
+                    torneio,
+                    bet_id,
+                ),
+            )
+        else:
+            conn.execute(
+                "UPDATE bets SET data_hora = %s, links_json = %s, status = %s, sofascore_event_id = %s WHERE id = %s",
+                (
+                    data_hora.isoformat() if data_hora else None,
+                    json.dumps(links, ensure_ascii=False),
+                    status,
+                    sofascore_event_id,
+                    bet_id,
+                ),
+            )
 
 
 def update_status(bet_id: int, status: str) -> None:
