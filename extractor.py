@@ -121,7 +121,13 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
     from google.genai import types
 
     client = _get_gemini_client()
-    prompt = _GEMINI_PROMPT.format(legenda=caption_text or "(sem legenda)")
+    # .replace() em vez de .format(): o prompt tem um JSON de exemplo cheio
+    # de chaves { } literais, que .format() tentaria interpretar como
+    # placeholders — causou um KeyError em produção (bug pré-existente,
+    # nunca tinha sido exercitado antes por acaso; o JSON de exemplo ficou
+    # maior/com comentários "//" depois da mudança de detecção de múltipla,
+    # o que tornou o erro consistente).
+    prompt = _GEMINI_PROMPT.replace("{legenda}", caption_text or "(sem legenda)")
 
     contents: list = [prompt]
     if image_path:
