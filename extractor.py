@@ -557,7 +557,24 @@ def extract_bet_info(image_path: Optional[str], caption_text: Optional[str] = No
     # na legenda, que não tem relação com as seleções da múltipla.
     if bet.tipo_aposta != "multipla" and caption_text and (not bet.mercado or bet.odd is None or not bet.torneio):
         extra = parse_free_text(caption_text)
-        bet.mercado = bet.mercado or extra.mercado
+        mercado_extra = extra.mercado
+        # extra.mercado foi montado por parse_free_text() com o nome que
+        # ELE achou na legenda sozinha (ex: "molcan", sobrenome truncado do
+        # texto puro "Set 2 molcan odd..."), que pode ser mais incompleto
+        # que o nome que o motor principal (Gemini, tipicamente) já achou
+        # olhando a imagem inteira (ex: "Alex Molcan"). Troca o nome dentro
+        # do texto do mercado pelo mais completo dos dois — bug real visto
+        # em produção: card saía com "molcan vencer o 2º set" mesmo já
+        # tendo "Alex Molcan" confirmado como jogador1.
+        if (
+            mercado_extra
+            and extra.jogador1
+            and bet.jogador1
+            and extra.jogador1.lower() != bet.jogador1.lower()
+            and mercado_extra.lower().startswith(extra.jogador1.lower())
+        ):
+            mercado_extra = bet.jogador1 + mercado_extra[len(extra.jogador1) :]
+        bet.mercado = bet.mercado or mercado_extra
         bet.odd = bet.odd if bet.odd is not None else extra.odd
         bet.torneio = bet.torneio or extra.torneio
         bet.jogador1 = bet.jogador1 or extra.jogador1
