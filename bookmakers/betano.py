@@ -3,21 +3,26 @@ bookmakers/betano.py
 =====================
 Adaptador da Betano (domínio brasileiro: betano.bet.br).
 
-Calibrado ao vivo em 31/08/2026 contra https://betano.bet.br/sport/tenis/ —
-diferente do que o README avisava, essa URL (o valor padrão de
-BETANO_TENNIS_PATH) já é a seção de tênis correta (confirmado pelo <title>
-"Apostas Tênis" e pelo <h1> "Tênis" da página) e a página respondeu 200 sem
-bloqueio (nem CAPTCHA, nem DOM vazio) usando o mesmo navegador stealth de
-bookmakers/base.py.
+Calibrado ao vivo em 02/09/2026: a URL certa para achar o link exato de
+qualquer jogo do dia é https://betano.bet.br/sport/tenis/jogos-de-hoje/
+(não https://betano.bet.br/sport/tenis/, que foi a URL usada na calibração
+anterior deste arquivo). A diferença é real: /sport/tenis/ é majoritariamente
+uma página de conteúdo/SEO ("Por que escolher a Betano...", "Tipos de
+apostas...") com só uma pequena seção de destaques no topo — bug real visto
+em produção, jogos reais do dia (ex: Ben Shelton x Hubert Hurkacz, US Open)
+não apareciam ali. /jogos-de-hoje/ já mostra a lista completa dos próximos
+jogos, ~80 jogos de tênis num dia de Grand Slam, sem precisar de scroll.
 
-A listagem de jogos usa um componente de cards ("hero cards") com atributos
-`data-qa` estáveis (usados pelos próprios testes automatizados da Betano):
-cada jogo é um `[data-qa^="hero_card_container_"]` contendo os nomes dos
-dois jogadores, a data/hora e um link relativo (`/odds/.../<id>/`).
+A estrutura de card também é diferente da versão anterior: cada jogo é um
+`a[data-qa='pre-event']` (o próprio link, href relativo tipo
+"/odds/jogador1-jogador2/91503834/"), contendo `[data-qa='participants']`
+com os 2 nomes em `<div>` filhos diretos (sem atributo individual por
+jogador, diferente do que a calibração anterior assumia).
 
 ⚠️ Se a Betano voltar a bloquear no futuro (403, CAPTCHA, DOM vazio mesmo
-com stealth), o adaptador cai automaticamente para o link aproximado — o
-pipeline não quebra, só se perde a conveniência do link exato nessa casa.
+com stealth) ou mudar a estrutura de novo, o adaptador cai automaticamente
+para o link aproximado — o pipeline não quebra, só se perde a conveniência
+do link exato nessa casa.
 """
 
 from __future__ import annotations
@@ -33,11 +38,8 @@ from .base import BookmakerAdapter
 logger = logging.getLogger(__name__)
 
 _SELECTORS = {
-    "match_card": "[data-qa^='hero_card_container_']",
-    "player1_name": "[data-qa='first-participant-name']",
-    "player2_name": "[data-qa='second-participant-name']",
-    "match_time": "[data-qa='hero_card_date']",
-    "match_link": "[data-qa='hero_card_link']",
+    "match_card": "a[data-qa='pre-event']",
+    "player_names": "[data-qa='participants'] > div > div",
 }
 
 
@@ -46,6 +48,7 @@ class BetanoAdapter(BookmakerAdapter):
     display_name = "Betano"
     base_url = settings.BETANO_BASE_URL       # ex: https://betano.bet.br
     tennis_path = settings.BETANO_TENNIS_PATH  # ex: /sport/tenis/
+    jogos_de_hoje_path = "/sport/tenis/jogos-de-hoje/"
 
     def build_fallback_link(self, torneio, data_hora):
         # Sem parâmetro de dia confirmado — leva pra seção geral de tênis.
@@ -53,7 +56,7 @@ class BetanoAdapter(BookmakerAdapter):
 
     def find_exact_link(self, jogador1, jogador2, torneio, data_hora):
         threshold = settings.SUPERBET_FUZZY_THRESHOLD
-        url = f"{self.base_url.rstrip('/')}{self.tennis_path}"
+        url = f"{self.base_url.rstrip('/')}{self.jogos_de_hoje_path}"
 
         def _buscar(page):
             if not self._safe_goto(page, url):
@@ -61,15 +64,12 @@ class BetanoAdapter(BookmakerAdapter):
             cards = page.query_selector_all(_SELECTORS["match_card"])
             logger.debug("Betano: %d cards encontrados em %s", len(cards), url)
             for card in cards:
-                j1_el = card.query_selector(_SELECTORS["player1_name"])
-                j2_el = card.query_selector(_SELECTORS["player2_name"])
-                nome1 = j1_el.inner_text().strip() if j1_el else ""
-                nome2 = j2_el.inner_text().strip() if j2_el else ""
-                if not nome1 or not nome2:
+                nomes_el = card.query_selector_all(_SELECTORS["player_names"])
+                nomes = [el.inner_text().strip() for el in nomes_el if el.inner_text().strip()]
+                if len(nomes) < 2:
                     continue
-                if pair_matches(jogador1, jogador2, nome1, nome2, threshold):
-                    link_el = card.query_selector(_SELECTORS["match_link"]) or card
-                    href = link_el.get_attribute("href") if link_el else None
+                if pair_matches(jogador1, jogador2, nomes[0], nomes[1], threshold):
+                    href = card.get_attribute("href")
                     return urljoin(url, href) if href else url
             return None
 
