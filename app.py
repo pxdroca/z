@@ -81,14 +81,17 @@ STATUS_CSS_CLASS = {
 # fundo sólido de cor de marca.
 LOGO_SUPERBET = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgOTAuNzE4MDAyIiBmaWxsPSJub25lIj4KICA8cGF0aCBmaWxsPSIjZmZmZmZmIiBkPSJtIDQ1LjA3NjE2NCwyOC4wNzg5OTcgYyAtMC40MTgwMjUsLTQuODgzNDQ2IC0yLjU2NjQ4MiwtOC4zMDIxODEgLTkuMTU3NjczLC05LjMwOTk3OSAtNi4yOTMwNjYsLTAuOTcyMTUyIC05LjI3NzU3NCwxLjA1OTY0NyAtOS43OTkyOTUsNC4yOTY5MTMgLTAuNTk2MjUzLDMuNzI2NTg0IDEuODk1Njk2LDUuNTQ0NTA5IDguMzkyOTE0LDcuNTUwMzgyIHEgNC4xMzE2NDcsMS4yODMyNDEgOC4yNzMwMTUsMi41NDcwMzkgQyA1OS4xNDk2ODcsMzguMTYwMjE1IDY0LjM2NjkwNCw0NC44ODEwMjcgNjIuODY5NzksNTYuMzI2NDk5IDYxLjIyNjg1Myw2OS4xMDcwNiA0OS41MTg5LDc3LjgwNDU4MiAyOC40MTAyMzQsNzQuNjAyOTYxIDcuNDExNzQ3LDcxLjM3ODY1NSAtMy4xNjUyNjksNjEuMTQ4Mzc0IDAuODMzNTE3MSw0NS4xMzA1NDYgcSA5LjkyNTY3MzksMS43MzA0MzEgMTkuODcwNzkxOSwzLjMyODAwMSBjIC0xLjMzNTA4OSw1LjAxMzA2NSAwLjY5MzQ2OCw5LjM5MDk5IDEwLjQ1NzExNywxMC44ODgxMDQgNy40OTg1MzQsMS4xNDA2NTkgMTEuMDE0NDg0LC0wLjY3NDAyNSAxMS41Njg2MSwtNC41MDQzMDUgMC40ODYwNzYsLTMuMzQ0MjA0IC0xLjQxOTM0MiwtNS4zMTc2NzIgLTcuMDk2NzEsLTcuMDc0MDI3IFEgMzEuNTU2NzY4LDQ2LjUwMTI4MSAyNy40ODM0NDksNDUuMjA4MzE4IEMgMTAuOTgyNzg2LDM5Ljk5MTEwMSA0LjQyMDc1ODgsMzIuMjIzNjA1IDYuNDkxNDQyOSwyMC4zOTg5OTQgOC40Nzc4NzM5LDkuMTIyMDI4MiAxOC43NDA1NjEsMC40Mjc3NDY5NyAzOC41NjU5ODUsMy40OTY1MDc0IDU3LjMxMjMyLDYuMzQ4MTUzOSA2Ni4xMTY3NzgsMTUuOTQ5Nzc4IDY0LjUwMzAwNSwzMC42ODQzNjUgUSA1NC43ODE0ODQsMjkuNDQ2NDkxIDQ1LjA3NjE2NCwyOC4wNzg5OTcgTSA2OS40ODY5MDYsNTAuOTczMTggNzQuNzE3MDg1LDkuOTc0MjgxNiBxIDkuNzIxNTIyLDEuMjQxMTE0NCAxOS40NTYwMDYsMi4zNDkzNjc0IEwgODkuNjAwNzM1LDUyLjQ5OTQ2IGMgLTAuOTE3MDY0LDcuOTkxMDkxIDIuMjM1OTUsMTIuMzYyNTM1IDkuNjU2NzEyLDEzLjE1NjQ1OSA3LjQyMDc2MywwLjc4NzQ0NCAxMS40MTk1NDMsLTIuODI1NzIxIDEyLjIwMzc1MywtMTAuODI5Nzc1IGwgMy45ODU4MywtNDAuMjM3Mzc5IHEgOS43NDc0NCwwLjk2MjQzIDE5LjUwMTM2LDEuNzk4NDgxIEwgMTMxLjQyOTIsNTcuNTY0MzcyIEMgMTI5Ljg5NjQ1LDc2LjA1Nzk0OCAxMTguMDM2MTksODUuNzE3OSA5Ny4zNTIwMjksODMuNTM3MDM5IDc2LjY3NDM1MSw4MS4zMTQwNTEgNjcuMDk1NDExLDY5LjM2OTU0MSA2OS40OTAxNDcsNTAuOTY5OTQgbSA2OC45NjEyMzMsMzQuOTg0NTE4IDUuNDUzNzgsLTY4LjgyODM3NyBxIDE1LjQzNDU0LDEuMjIxNjcxIDMwLjg4ODUxLDIuMTE2MDUxIGMgMTYuMTA4NTcsMC45MzAwMjYgMjYuODIxNjgsMTAuNTQxMzcyIDI2LjI3NDAzLDI1LjY0MjEzNSAtMC41NDQ0LDE0Ljk4MDg2NiAtMTIuMzU2MDUsMjMuOTE4MTg1IC0yOS4wODY3OCwyMi45NTU3NTQgYSAxNDk3LjExNDQsMTQ5Ny4xMTQ0IDAgMCAxIC0xMS43NDM2LC0wLjcyNTg3NCBsIC0xLjMzNTA5LDIwLjMyNDQ2MyBxIC0xMC4yMjcwNSwtMC42NzQwMjUgLTIwLjQ1MDg1LC0xLjQ4NDE1MiBtIDIyLjg2ODI2LC0zNS4yOTU2MDYgcSA0LjY4NTc4LDAuMzExMDg4IDkuMzcxNTUsMC41ODY1MzEgYyA2LjAxNzYzLDAuMzU2NDU2IDkuMzM5MTQsLTIuNTYwMDAxIDkuNTkxOSwtNy4zMjM1NDYgMC4yMzk4MSwtNC42NjYzMzEgLTIuNzE1NTQsLTcuOTk0MzMyIC04Ljk2MzI0LC04LjM2Mzc1IHEgLTQuNDg4MTEsLTAuMjY4OTYyIC04Ljk2OTczLC0wLjU2MDYwOCB6IG0gNDQuMjcxODEsMzkuMTI5MTI2IDIuNDEwOTQsLTY5LjAwMzM2NCBxIDI1LjI5MjE3LDAuODgxNDE4IDUwLjYwMDUyLDAuODg3ODk5IGwgLTAuMDAzLDE2Ljg4OTUyNSBxIC0xNS43MDAyNSwwIC0zMS40MDA1MSwtMC4zNDAyNTQgbCAtMC4yMDA5Miw5LjIzNTQ0NiBxIDEzLjQwOTIyLDAuMjkxNjQ2IDI2LjgyNDkyLDAuMzMzNzczIGwgLTAuMDU4MywxNi4zOTM3MjcgcSAtMTMuNTYxNTIsLTAuMDQ4NjEgLTI3LjExOTgsLTAuMzM3MDEzIGwgLTAuMjA3MzksOS42MzQwMjggcSAxNi4yODM1NSwwLjM0OTk3NSAzMi41NjcxLDAuMzQ2NzM0IHYgMTYuODg5NTI1IHEgLTI2LjcxMTUxLDAgLTUzLjQxNjUzLC0wLjkzMDAyNiBtIDEyMy45ODgzLC0xOC4yMTQ4OTIgMC44MDY4OCwxNy4xNjgyMDggYyAtMS42NDk0MSwwLjU3NjgxIC00LjA0MDkxLDAuOTgxODczIC02LjMzODQyLDEuMDc5MDg5IC0xMi43NDQ5MiwwLjU0NzY0NiAtMjMuMjY2ODUsLTIuMjQ1NjcyIC0zMC42ODc2MiwtMTkuNjYzMzk5IGwgLTAuODY4NDUsLTEuOTcwMjI4IHEgLTIuODg0MDUsMC4wNjQ4MSAtNS43NjgxLDAuMTE5ODk4IGwgMC40MDgzLDIyLjE0ODg2OCBxIC0xMC4yNCwwLjE5NDQzIC0yMC40ODk3MywwLjI0MzAzOSBMIDI2Ni4yODYxNiwyMS42NTMwNyBxIDE2LjAyMTA3LC0wLjA4MTAxIDMyLjAzODksLTAuNTE4NDgxIGMgMTYuMjI4NDUsLTAuNDQwNzA5IDI3Ljc2NzksNy4xMjkxMTYgMjguNTI5NDIsMjIuODE2NDEyIDAuNTAyMjgsMTAuNjE1OTAzIC00LjcxNDk0LDE3LjU0MDg2NiAtMTQuNTAxMjcsMjAuMzgyNzkyIDQuNzA4NDYsNy43ODM2OTggOS43OTkyOSw3Ljc3NzIxNyAxMy45Mjc3LDcuNTg5MjY3IGEgMjkuMTY0NTY2LDI5LjE2NDU2NiAwIDAgMCAzLjI5NTYsLTAuMzQ5OTc0IG0gLTQzLjQyNjA0LC0zMy45NjA1MTcgMC4yNzg2OCwxNS4wMDAzMDggcSA1LjQ1Mzc3LC0wLjEwMzY5NiAxMC45MDc1NSwtMC4yNDMwMzggYyA2LjAxNzYyLC0wLjE1ODc4NSA4Ljg3MjUsLTMuMzM3NzIyIDguNzI2NjgsLTcuODA2MzgyIC0wLjE0MjU4LC00LjM3MTQ0NSAtMy4xNjU5NywtNy4zNDYyMyAtOS40MTY5MSwtNy4xODA5NjQgcSAtNS4yNDk2MiwwLjEyOTYyIC0xMC40OTYsMC4yMzAwNzYgbSA1MS4xMzg0NSw1MS4wODY1OTggLTMuNTUxNiwtNjguOTU0NzU2IHEgMTUuNDU3MjIsLTAuNzkzOTI0IDMwLjg5ODI0LC0xLjkyMTYyMSBjIDE2LjQwNjY5LC0xLjIwODcwOSAyNS40MjUwMiw1LjI5MTc0OSAyNi40NTg3NCwxNi40ODQ0NjEgMC43Mzg4Myw4LjExNDIzMSAtNC40ODgxLDEzLjc3MjE1NyAtMTAuNTcwNTMsMTUuOTY1OTggOC40MjIwNywxLjUwMDM1NSAxNC4zNzE2NSw1LjczNTY5OCAxNS4xNzUyOSwxNC40Mzk3MDEgMS4xOTI1LDEyLjc0ODE1NiAtNy4zNDYyMywyMC41NzcyMjEgLTIzLjc1MjkxLDIxLjgwODYxNCBxIC0xNy4zMTcyOCwxLjI4NjQ4MiAtMzQuNjU3MjMsMi4xNzc2MjEgTSAzNTUuMDQ2OSw0NS44NjkzODEgcSA0LjkyNTU3LC0wLjMyMDgwOSA5Ljg0NzksLTAuNjcwNzg0IGMgNC44NzM3MiwtMC4zNTMyMTYgNy4xMTI5MSwtMy4xMjA2MDkgNi43OTg1OCwtNy4xODA5NjUgLTAuMzE0MzMsLTQuMDYwMzU2IC0yLjkxOTY5LC02LjM0ODE1MyAtNy43NDQ4MSwtNS45OTgxNzggcSAtNC44NzY5NiwwLjM0NjczMyAtOS43NTcxNywwLjY2NDMwMyB6IG0gMS43OTE5OSwyNy41NjA1MTYgYSAxNTI5LjUxOTUsMTUyOS41MTk1IDAgMCAwIDkuOTI1NjgsLTAuNjc3MjY3IGMgNS42OTAzMywtMC40MDgzMDQgOC4zOTI5MSwtMy4xMTczNjggOC4wNTI2NiwtNy40NzI2MSAtMC4zNDAyNSwtNC4zNjE3MjIgLTMuMzk5MywtNi42MDczOTQgLTkuMDMxMywtNi4yMDIzMyBxIC00LjkxNTg0LDAuMzQ5OTc1IC05LjgzNDkzLDAuNjcwNzg0IHogbSA0Ny4yMjM5MiwxMC4zNTk5MDIgLTYuNTc4MjQsLTY4LjczMTE2MSBhIDE0NTQuOTg3OCwxNDU0Ljk4NzggMCAwIDAgNDkuODY4MTgsLTUuNjQxNzIzNiBsIDIuMTg3MzQsMTYuNzQ2OTQxNiBxIC0xNS4zNTM1MiwyLjAwMjYzNCAtMzAuNzMyOTgsMy42ODQ0NTggbCAxLjAwNDU3LDkuMTgzNTk3IHEgMTMuMzUwODksLTEuNDU4MjI5IDI2LjY4MjM0LC0zLjE1OTQ5NCBsIDIuMDc3MTYsMTYuMjYwODY1IHEgLTEzLjQ4MDUxLDEuNzE3NDY5IC0yNi45ODA0NywzLjE5NTE0IGwgMS4wNDY2OSw5LjU3ODk0IHEgMTYuMjEyMjYsLTEuNzY5MzE3IDMyLjM5MjExLC0zLjg5NTA5IGwgMi4yMDAzLDE2Ljc0Njk0MyBhIDE1MjYuMjc5LDE1MjYuMjc5IDAgMCAxIC01My4xNjcsNi4wMjczNDMgbSA3Ny41NTgzLC05LjQzMzExNyAtNy42MjE2NywtNTEuNTk4NTk5IHEgLTkuMDY2OTQsMS4zNDE1NyAtMTguMTQwMzYsMi41NjY0ODIgTCA0NTMuNjAwNDQsOC41ODQxMDM5IEEgMTQ1NC45ODc4LDE0NTQuOTg3OCAwIDAgMCA1MDkuMDk3MzcsMCBsIDIuOTAzNSwxNi42MzY3NjQgcSAtOS4xODY4NCwxLjYwNDA1MiAtMTguMzg2NjQsMy4wOTE0NDQgbCA4LjMxODM4LDUxLjQ5MTY2MyBxIC0xMC4xNDkyNywxLjYzNjQ1NiAtMjAuMzExNSwzLjEzNjgxMSIgLz4KPC9zdmc+Cg=="
 LOGO_BETANO = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxODcuNTY4NDIgNDAuNjI0Mjk4Ij4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtMTg5LjM0NzkyLC0xMDcuMjQxNzkpIj4KICAgIDxwYXRoIGZpbGw9IiNmZmZmZmYiIGQ9Im0gMjUwLjkxNjU2LDExNS42MTMyNSBjIC0xMC44MzEyOCwwIC0xOC42NjMyNCw5LjAwNjk2IC0xOC42NjMyNCwxOC44MDI2MyAwLDguNDU4NDYgNS44ODMzNSwxMy40NDg2IDEzLjY3MTMsMTMuNDQ4NiA3Ljc4Nzk1LDAgMTIuNjI3NDksLTQuODQzNjQgMTQuMTQ3NzEsLTEwLjgwNjY3IC0yLjA5MzMyLDEuNTAyNiAtNS42ODc1NSwzLjE5OTExIC05Ljc0NDE4LDMuMTk5MTEgLTMuNDY4MjIsMCAtNy42Mjk2NSwtMS40ODMyMSAtOC4wMzUxNSwtNi4wNzEzNCA4LjcxMTQ2LC0xLjEzNTEgMTUuODEzNzEsLTMuOTI1OTMgMTkuNjc2NDMsLTYuODQ5MTUgMC4wNiwtMC40ODcgMC4xMjIwMSwtMS4xOTYxMSAwLjEyMjAxLC0yLjExMDMxIDAsLTQuOTI5MjQgLTMuMDg1NjMsLTkuNjE0NjcgLTExLjE3NjU4LC05LjYxNDY3IHogbSAxLjI3ODIxLDEyLjQxMjM5IGggLTkuNDk0NDcgYyAwLjg1MywtNC4zODA2MyAzLjk1NTczLC03LjYwNTA2IDYuOTk5NjQsLTcuNjA1MDYgMi4wNjgyMywwIDMuMDQxNjMsMS4wOTUzMSAzLjA0MTYzLDMuNzcyOTMgMCwxLjIxNzIxIC0wLjE4MSwyLjQ5NTQyIC0wLjU0NywzLjgzMzkzIHogbSAxMTAuNTQ2MDgsLTEyLjQxMjM5IGMgLTExLjEzNjU4LDAgLTE5LjA0NjQ0LDguNjQxMjYgLTE5LjA0NjQ0LDE5LjcxNjk0IDAsOC4wOTI2NiA2LjMyOTM1LDEyLjUzNDI5IDE0LjE3ODIsMTIuNTM0MjkgMTEuMTM0MjksMCAxOS4wNDQxNCwtOC42NDEyNiAxOS4wNDQxNCwtMTkuNzE2OTQgMCwtOC4wOTI2NiAtNi4zMjY5NCwtMTIuNTM0MjkgLTE0LjE3ODIsLTEyLjUzNDI5IHogbSAtNC41MDI0MywyNy4zMjE5OSBjIC0yLjU1NjQyLDAgLTMuOTU1OTMsLTIuMDY4NzIgLTMuOTU1OTMsLTUuOTYzNjMgMCwtNy43Mjg3NiAzLjEwMjYyLC0xNi40MzA5MyA4LjA5Mjc2LC0xNi40MzA5MyAyLjU1NTcyLDAgMy45NTU4MiwyLjA2ODIyIDMuOTU1ODIsNS45NjMwNCAwLDcuNzI5MzYgLTMuMTY1OTIsMTYuNDI5ODIgLTguMDkyNjUsMTYuNDI5ODIgeiBtIC0xNC45NzI0MSwtMTkuNDczMDMgYyAwLDAuOTczIC0wLjEsMi4wNjExMSAtMC4zMjYsMy4yMjQ5MiBsIC0zLjk5MzgzLDIwLjU2Nzg1IGggLTkuOTI1MjcgbCAzLjUyMjEzLC0xOC4xMzQwMyBjIDAuMTgsLTAuOTEyMDEgMC4yNTUsLTEuNzAyNDIgMC4yNTUsLTIuNDMzODIgMCwtMi44NTkyMiAtMS41MTk2MiwtNC4xMzY4NCAtNC4yNTg3MywtNC4xMzY4NCAtMS4wOTQ4MiwwIC0yLjQ1MzMyLDAuMzUyMDEgLTMuMzIzNTMsMC43MjkwMiBsIC00LjY1NDkzLDIzLjk3NTY3IGggLTkuOTIxMTcgbCA2LjAyODA0LC0zMS4wMzQwMyBoIDkuOTIxMTcgbCAtMS4wOTQ4LDUuNTk3OTQgYyAxLjYwOTMsLTIuNTc3NTEgNS4xOTUzMywtNi4yMDc0NCA5Ljg2Mzc2LC02LjIwNzQ0IDQuMzE5NzMsMCA3LjkwODA2LDIuNjE2NzEgNy45MDgwNiw3Ljg0ODk2IHogbSAtMzEuNzQ0MjIsMi4wMjEyMSBjIDAsLTUuNTk3OTQgLTQuODc3NjQsLTkuODcwMTcgLTExLjcwNTU5LC05Ljg3MDE3IC04LjQ5NjU2LDAgLTEyLjkzMjg4LDUuNTkwMjQgLTE0LjI0MSwxMC44MDY2NyAyLjY2NDIyLC0xLjk0MDQxIDYuNDU4MjUsLTMuMTk5MjEgOS43NDQxNywtMy4xOTkyMSAzLjA2MjEyLDAgNi4wOTg0NSwwLjk5NiA2LjA5ODQ1LDQuMDc3NjIgMCwwLjMwNSAwLDAuNjY4MDEgLTAuMDYsMS4xNTU3MSAtNy44Mjc3NiwwLjMxNjAxIC0xOS4xMDczNSw0LjUwNTA0IC0xOS4xMDczNSwxMy4xNDM5IDAsMy41OTA2MiAyLjU5NzkzLDYuMjY4MjQgNi42MTI4Niw2LjI2ODI0IDQuMDE1MDMsMCA3Ljc0NjM1LC0yLjczODUyIDkuOTM4MTYsLTYuMjA3MzQgbCAtMS4wODU0LDUuNTk3ODQgaCA5LjkxOTM3IGwgMy42MjA3MywtMTguNjY5MDQgYyAwLjE4MSwtMS4wOTUzMSAwLjI2NywtMi4xMjkwMiAwLjI2NywtMy4xMDI0MiB6IG0gLTEyLjQzMzU5LDE0LjcxNDkgYyAtMS4yMTcyMSwwLjU0NiAtMi43ODA3MiwwLjkxMjAxIC0zLjkzNjQzLDAuOTEyMDEgLTIuNDk1MzIsMCAtMy43MjE5MiwtMS4zNzMyMSAtMy43MjE5MiwtMy4xOTk4MiAwLC0zLjg1NDQzIDQuNTY3NjMsLTYuMjk4MjUgOC45NzY0NSwtNC40OTY3MyBsIC0xLjMxOTgsNi43ODQ1NCB6IG0gLTIyLjMwMzA2LDAuMDYgYyAxLjMyMjExLDAgMi42MDU1MiwtMC4zNzUgNC4yNzU4MywtMS42MzM5MSAtMS41MzE0MSw1LjIyMjI0IC01LjgxNDc0LDkuMjQxMzcgLTEwLjQwODY3LDkuMjQxMzcgLTUuNjM5NTQsMCAtNy40MTgyNiwtNC43NDA0MyAtNi4yNDQ5NCwtMTAuODA2NjcgbCAyLjk4NjQxLC0xNS4zNTkwMiBoIC00LjA1NDgzIGwgMS4wNjQzMiwtNS40Nzc3NCBoIDQuMDY2NTIgbCAxLjExODExLC01Ljg0NzAzIDEwLjIxNTk3LC0xLjQzNjQyIC0xLjQyODIsNy4yODM0NSBoIDguNTA1ODYgYyAtMC42MzgwMiwzLjE4NDUzIC0yLjYxODQzLDUuNDc3NzQgLTYuNjgxNDYsNS40Nzc3NCBoIC0yLjg4NzUyIGwgLTIuOTIxMzEsMTUuMDM0OTEgYyAtMC40NTEwMSwyLjMwNDMyIDAuNzksMy41MjMzMiAyLjM5MzkxLDMuNTIzMzIgeiBtIC00Ni4xMDg4MywtOC40MjM3NiBjIDAsOC4zMzY0NiAtMTEuMjE5NzcsMTUuNDIxNzIgLTI5Ljk1MzksMTUuNDIxNzIgaCAtMTEuMzc0NDkgbCA3Ljc3Mjc2LC00MC4wMTQ0OSBoIDI0Ljk3MzU3IGMgNy4wMzk2NSwwIDEwLjgwODU4LDEuNDUxNjEgMTAuODA4NTgsNS44NDM0NCAwLDUuMjU4NTMgLTguMzk5MjYsMTEuMDUxMDggLTIxLjYxNTc1LDEzLjQ0MjY5IGwgNy4yMDk1NCwtMTEuOTk2ODcgLTExLjAxNDc3LC0wLjAzIC00Ljc5NTYzLDE0Ljc3MjQgNy41OTU3NSwtMS4wNjY2MSAtOS42NTY4NywxNi4wNzI5MSAyMi43NjIwNywtMTguOTE2MzMgYyA0LjQzNjMyLDAgNy4yODkxNCwyLjU3NTAyIDcuMjg5MTQsNi40NzE3NCB6IiAvPgogIDwvZz4KPC9zdmc+Cg=="
-LOGO_BET365 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjE3Ljk3MyAxNy4yNzYgNjMuMTggMTYuNDE0Ij4KICA8cGF0aCBmaWxsPSIjZmZmZmZmIiBkPSJNMTguOTc0LDE4LjI3N2MxLjQxOS0wLjAwMSwyLjgzOC0wLjAwMiw0LjI1OCwwYy0wLjAxMywxLjg2OCwwLjAwMiwzLjczNS0wLjAwOSw1LjYwMwogICAgYzAuNDA0LTAuNTc1LDAuOTMxLTEuMDk3LDEuNjE5LTEuMzFjMS4yMzQtMC4zODgsMi43MjYtMC4xMTgsMy42MSwwLjg3MWMwLjg4OSwwLjk5MSwxLjE5MSwyLjM1NywxLjIyOCwzLjY1NAogICAgYzAuMDIxLDEuMzAxLTAuMTA0LDIuNjY0LTAuNzUsMy44MmMtMC40NCwwLjgxMy0xLjIwOSwxLjQ1Ni0yLjEyLDEuNjU4Yy0wLjkwOSwwLjIwMy0xLjk0NywwLjE3NC0yLjczOC0wLjM3CiAgICBjLTAuNTQzLTAuMzY1LTAuODQzLTAuOTctMS4xMi0xLjU0MmMwLjAxOCwwLjYwNC0wLjAxNiwxLjIwNi0wLjAyOCwxLjgwOWMtMS4zMTcsMC0yLjYzNCwwLTMuOTUxLDAKICAgIEMxOC45NzMsMjcuNzM5LDE4Ljk3MywyMy4wMDgsMTguOTc0LDE4LjI3N0wxOC45NzQsMTguMjc3eiIvPgogIDxwYXRoIGZpbGw9IiNmZmZmZmYiIGQ9Ik00Mi4zNDcsMjAuMzQ3YzEuNDIyLTAuNDU4LDIuODI1LTAuOTc0LDQuMjQ3LTEuNDMxYy0wLjAxMiwxLjIzOS0wLjAwNCwyLjQ3OS0wLjAwNSwzLjcxOAogICAgYzAuNjQ2LDAsMS4yOTMtMC4wMDEsMS45NDEtMC4wMDFjLTAuMDA4LDAuOTM4LTAuMDAxLDEuODc1LTAuMDA2LDIuODEyYy0wLjY0NywwLjAxMS0xLjI5Ni0wLjAxNy0xLjk0MiwwLjAxNQogICAgYzAuMDIsMC45NzMtMC4wMTEsMS45NDYsMC4wMTUsMi45MTljMC4wMTEsMC40MzMsMC4xOTgsMC45MjMsMC42MjgsMS4wOTVjMC40MzQsMC4wOTQsMC44ODYsMC4wMDcsMS4zMDYtMC4xMTkKICAgIGMtMC4wMDksMC45NC0wLjAwNSwxLjg4MS0wLjAwNCwyLjgyMWMtMS4xODcsMC4zNjktMi40NDgsMC42My0zLjY5MiwwLjQ1Yy0wLjc1Mi0wLjExLTEuNDcyLTAuNTEzLTEuODg1LTEuMTYxCiAgICBjLTAuNDYyLTAuNzAxLTAuNTg3LTEuNTYxLTAuNjE4LTIuMzgyYy0wLjAwMy0xLjIxMywwLTIuNDI1LTAuMDAxLTMuNjM3Yy0wLjQ5NiwwLjAwMS0wLjk5MS0wLjAwNi0xLjQ4NiwwLjAxCiAgICBjLTAuMDE4LTAuOTQxLTAuMDA2LTEuODgyLTAuMDA2LTIuODI0YzAuNDk3LDAuMDAzLDAuOTk0LDAuMDAxLDEuNDkyLDAuMDAxQzQyLjM0MSwyMS44NzEsNDIuMzEsMjEuMTA3LDQyLjM0NywyMC4zNDcKICAgIEw0Mi4zNDcsMjAuMzQ3eiIvPgogIDxwYXRoIGZpbGw9IiNmZmZmZmYiIGQ9Ik00OS41NDIsMTkuNTkxYzEuMzgyLTAuNTEsMi44ODMtMC41MzMsNC4zMzktMC41MTZjMS4zMiwwLjA1NiwyLjY4NiwwLjQzOSwzLjY5LDEuMzMxCiAgICBjMS4zMjgsMS4xNjMsMS4zODMsMy41NS0wLjAxNCw0LjY3N2MtMC4zNTcsMC4zMDEtMC43ODEsMC41MS0xLjIyMywwLjY1NGMwLjY0MSwwLjIyNSwxLjI4LDAuNTMyLDEuNzIyLDEuMDY3CiAgICBjMC43MDksMC44MTksMC44MjIsMi4wMDMsMC41NjYsMy4wMjJjLTAuMjMxLDAuOTM0LTAuOTMzLDEuNjkyLTEuNzc4LDIuMTIyYy0xLjUzNCwwLjgzMi0zLjM0OCwwLjgxNS01LjAzOCwwLjY1MQogICAgYy0wLjc5My0wLjA3NS0xLjU3NC0wLjIzNC0yLjM0Mi0wLjQ0MWMtMC4wMzItMS4wMjEsMC0yLjA0NC0wLjAxNi0zLjA2NGMxLjMxOCwwLjQzNywyLjc2MywwLjcyNyw0LjEzOCwwLjM5NwogICAgYzAuOTIyLTAuMjMyLDAuOTY5LTEuNjY1LDAuMTQ2LTIuMDU2Yy0wLjg3LTAuNDMzLTEuODg5LTAuMjY2LTIuODE0LTAuMTQzYzAuMDA1LTAuOTY0LDAuMDAxLTEuOTI5LDAuMDAyLTIuODk1CiAgICBjMC43MTgsMC4wMzQsMS40NDMsMC4wNzUsMi4xNTUtMC4wNDRjMC40My0wLjA3NiwwLjkxNy0wLjI5MiwxLjAzNS0wLjc1NGMwLjA2Ni0wLjM3LDAuMDI2LTAuNzkxLTAuMjMtMS4wODMKICAgIGMtMC4yOTEtMC4zNC0wLjc1MS0wLjQ3NC0xLjE4NC0wLjVjLTEuMDY0LTAuMDU1LTIuMTM1LDAuMTMtMy4xMzEsMC41QzQ5LjUzLDIxLjU0Myw0OS41NywyMC41NjYsNDkuNTQyLDE5LjU5MUw0OS41NDIsMTkuNTkxeiIvPgogIDxwYXRoIGZpbGw9IiNmZmZmZmYiIGQ9Ik02MC44NjYsMjEuMTI0YzAuOTkxLTEuMjI0LDIuNTI0LTEuOTI3LDQuMDgyLTIuMDMyYzEuNDQ4LTAuMDU5LDIuOTIzLTAuMDM4LDQuMzMyLDAuMzQ2CiAgICBjLTAuMDIsMS4wMDcsMCwyLjAxNS0wLjAxMSwzLjAyMmMtMS4xNDctMC4zMjEtMi4zNDMtMC41NDgtMy41MzgtMC40MTRjLTAuNzI2LDAuMDk4LTEuNDQ4LDAuNDcyLTEuODE3LDEuMTI1CiAgICBjLTAuMjU4LDAuNDM4LTAuMzE2LDAuOTUyLTAuMzU0LDEuNDQ5YzAuODYyLTAuNjc0LDIuMDA5LTAuODMzLDMuMDczLTAuNzY4YzEuMzQ3LDAuMDg3LDIuNjI1LDAuOTA0LDMuMjQ1LDIuMTA2CiAgICBjMC40NjQsMC44OTYsMC41NDUsMS45NDgsMC40MDIsMi45MzZjLTAuMTUyLDEuMDQ3LTAuNzE0LDIuMDM3LTEuNTY3LDIuNjdjLTEuMjU1LDAuOTc5LTIuOTM0LDEuMjY3LTQuNDg1LDEuMDY2CiAgICBjLTEuMzU0LTAuMTY1LTIuNjIyLTAuODg0LTMuNDYyLTEuOTU2Yy0wLjk4NC0xLjE4OS0xLjQyNC0yLjc0OC0xLjQ1My00LjI3NUM1OS4yNzMsMjQuNTQ3LDU5LjY0MiwyMi41NzYsNjAuODY2LDIxLjEyNAogICAgTDYwLjg2NiwyMS4xMjR6Ii8+CiAgPHBhdGggZmlsbD0iI2ZmZmZmZiIgZD0iTTcxLjI2NSwxOS4yOThjMi43ODEtMC4wMDEsNS41NjItMC4wMDEsOC4zNDIsMGMtMC4wMDMsMS4wMTIsMCwyLjAyNC0wLjAwMiwzLjAzNgogICAgYy0xLjQ4OCwwLjAxMi0yLjk3OC0wLjAyMS00LjQ2NSwwLjAxN2MwLjAxNCwwLjY3LDAuMDE3LDEuMzQzLTAuMDAxLDIuMDE0YzAuODQ0LTAuMDE2LDEuNzE5LTAuMTQzLDIuNTMzLDAuMTQ5CiAgICBjMS4xNjQsMC4zOSwyLjA2OCwxLjQzMSwyLjMzOSwyLjYyNGMwLjI1OCwxLjE0OSwwLjE5LDIuNDI1LTAuNDEsMy40NmMtMC41NjQsMC45Ny0xLjYwMywxLjU2My0yLjY2NSwxLjgzOAogICAgYy0xLjkxNywwLjQ3OC0zLjkyOSwwLjIxOS01LjgwOC0wLjI5OWMtMC4wMjgtMS4wMDUtMC4wMDUtMi4wMS0wLjAxMy0zLjAxNWMxLjIwNiwwLjMwNCwyLjUwNiwwLjYwMSwzLjcyNywwLjIwOAogICAgYzEuMDE2LTAuMzE1LDEuMTY3LTEuODM1LDAuMzY2LTIuNDUzYy0wLjQ4MS0wLjM2Mi0xLjEwNC0wLjQ1LTEuNjktMC40NzVjLTAuNjU2LTAuMDEtMS4zMTMsMC4wNzctMS45NTEsMC4yMjgKICAgIGMtMC4xMzYsMC4wMjYtMC4yNTQsMC4xMDQtMC4zNjIsMC4xODVjMC4wMzEtMC4xMDksMC4wNTItMC4yMiwwLjA2MS0wLjMzMkM3MS4yNjMsMjQuMDg4LDcxLjI2NCwyMS42OTIsNzEuMjY1LDE5LjI5OAogICAgTDcxLjI2NSwxOS4yOTh6Ii8+CiAgPHBhdGggZmlsbD0iI2ZmZmZmZiIgZD0iTTMxLjY4LDIzLjgwOGMxLjA4My0xLjA4NywyLjY5My0xLjQwNiw0LjE3Ni0xLjM5OWMxLjEyMi0wLjAzMiwyLjMwOCwwLjI1LDMuMTUxLDEuMDI4CiAgICBjMC44NzQsMC44MDcsMS4yNzksMS45OTMsMS40MzgsMy4xNDVjMC4xMDgsMC42OTYsMC4wOTUsMS40MDIsMC4wOTMsMi4xMDRjLTEuOTcxLDAtMy45NDEsMC01LjkxMywwCiAgICBjMC4wMzIsMC4zNDcsMC4xMDMsMC43MTUsMC4zNjgsMC45NjRjMC40NywwLjQ0NSwxLjE1NSwwLjUwNSwxLjc3LDAuNTQ2YzEuMDc3LDAuMDE4LDIuMTk0LTAuMDk4LDMuMTU1LTAuNjIyCiAgICBjLTAuMDA4LDAuODQ4LDAsMS42OTctMC4wMDcsMi41NDZjLTEuMjA0LDAuNDIzLTIuNDg3LDAuNTQ1LTMuNzU1LDAuNTY4Yy0xLjQzOCwwLjAyNi0yLjk4My0wLjIyOC00LjEwNy0xLjE5MgogICAgYy0xLjA0Ny0wLjg4NS0xLjUxMS0yLjI3NC0xLjU3Mi0zLjYwOUMzMC4zODQsMjYuNDU0LDMwLjYzMywyNC44NywzMS42OCwyMy44MDhMMzEuNjgsMjMuODA4eiIvPgogIDxwYXRoIGZpbGw9IiNmZmZmZmYiIGQ9Ik0zNS4wMDYsMjUuMDVjMC4zNC0wLjQ5MiwxLjE3OS0wLjUyMywxLjUxNy0wLjAxMmMwLjMwNCwwLjQ2MywwLjMyMywxLjA0MywwLjMzMywxLjU3OAogICAgYy0wLjc0MSwwLjAwMS0xLjQ4MSwwLjAwMS0yLjIyMiwwLjAwMUMzNC42NTQsMjYuMDgxLDM0LjY4NCwyNS41MDQsMzUuMDA2LDI1LjA1TDM1LjAwNiwyNS4wNXoiLz4KICA8cGF0aCBmaWxsPSIjZmZmZmZmIiBkPSJNMjMuOTM4LDI1LjM1OGMwLjM5OS0wLjEyOSwwLjg3MiwwLjA2OSwxLjA1MywwLjQ1MWMwLjI2MSwwLjUxNiwwLjI1MiwxLjExNSwwLjI2LDEuNjgKICAgIGMtMC4wMiwwLjU2Ni0wLjA0OCwxLjE3OC0wLjM3MSwxLjY2NmMtMC4zMTMsMC40ODMtMS4xMzUsMC40ODQtMS40MzctMC4wMTJjLTAuMjg3LTAuNDYxLTAuMzE2LTEuMDI5LTAuMzE5LTEuNTU3CiAgICBjMC0wLjUxLTAuMDAxLTEuMDMyLDAuMTUtMS41MjRDMjMuMzcxLDI1Ljc0MywyMy42LDI1LjQzOCwyMy45MzgsMjUuMzU4TDIzLjkzOCwyNS4zNTh6Ii8+CiAgPHBhdGggZmlsbD0iI2ZmZmZmZiIgZD0iTTY0LjQ2NywyNi40MTVjMC42MDEtMC4yMiwxLjM2Ny0wLjAzNywxLjcwMiwwLjUzNGMwLjQwOSwwLjY5OCwwLjM4MSwxLjYzOS0wLjA1MywyLjMxOAogICAgYy0wLjQyOCwwLjcxNi0xLjU4NCwwLjgtMi4xMTQsMC4xNmMtMC40NTctMC41MjEtMC41LTEuMjc4LTAuMzU5LTEuOTI5QzYzLjcyOSwyNy4wNCw2NC4wMDksMjYuNTc5LDY0LjQ2NywyNi40MTVMNjQuNDY3LDI2LjQxNXoiLz4KPC9zdmc+Cg=="
 
 # Fundo do botão = cor de marca sólida; logo real (recolorida para branco)
-# por cima — mesmo tratamento pras 3 casas.
+# por cima. bet365 é exceção: o SVG oficial usa duas cores (o "bet" em
+# branco, o "365" em amarelo) — recolorir esse traçado inteiro pra branco
+# sólido (como as outras duas casas) apaga a cor característica da marca,
+# então usa um wordmark de texto (mesma paleta oficial: fundo verde-escuro
+# #027b5b, "bet" branco + "365" amarelo) em vez do SVG traçado.
 BOOKMAKER_BADGES = {
     "superbet": {"logo": LOGO_SUPERBET, "cor": "#e2001a"},
     "betano": {"logo": LOGO_BETANO, "cor": "#ff5000"},
-    "bet365": {"logo": LOGO_BET365, "cor": "#027b5b"},
+    "bet365": {"wordmark": True, "cor": "#027b5b"},
 }
 
 
@@ -216,36 +219,15 @@ def _inject_css() -> None:
         [class*="profileContainer"] {
             display: none !important;
         }
-        /* Botão de recolher/expandir a sidebar (a seta "‹"/"›") — movido
-           pro lado direito do header pra não disputar espaço visual com o
-           título (.app-header), que fica alinhado à esquerda. */
-        div[data-testid="stSidebarCollapsedControl"],
-        button[data-testid="stBaseButton-headerNoPadding"] {
-            top: 0.6rem !important;
-            left: auto !important;
-            right: 1rem !important;
-        }
+        /* Sem sidebar nativa (filtros viraram popover no header — ver
+           _header_e_filtros), então não sobra mais o espaço vazio que a
+           barra da sidebar deixava acima do conteúdo: só o respiro mínimo
+           do topo da página. */
         div[data-testid="stAppViewContainer"] > div:first-child {
             padding-top: 0.5rem;
         }
-        .main .block-container {
-            padding-top: 2.5rem !important;
-        }
-
-        /* ---------------------------------------------------------------
-           Sidebar de filtros no lado direito da tela (pedido do usuário) —
-           reordena via flexbox em vez de mover o elemento no DOM (o
-           stAppViewContainer real é "display:flex; flex-direction:row"
-           com [decoração vazia, sidebar, main] nessa ordem — troca só a
-           ordem visual). HACK sobre estrutura interna do Streamlit sem
-           contrato estável: pode quebrar em atualizações futuras da
-           biblioteca, testado na versão em uso em 02/09/2026.
-        --------------------------------------------------------------- */
-        section[data-testid="stSidebar"] {
-            order: 2;
-        }
-        section.stMain {
-            order: 1;
+        div[data-testid="stMainBlockContainer"] {
+            padding-top: 1.5rem !important;
         }
 
         /* ---------------------------------------------------------------
@@ -256,7 +238,24 @@ def _inject_css() -> None:
             font-weight: 800;
             font-size: 2.1rem;
             letter-spacing: -0.02em;
-            margin-bottom: 1rem;
+            margin-bottom: 0;
+            line-height: 1.4rem;
+            padding-top: 0.3rem;
+        }
+
+        /* Cabeçalho de cada seção de status (Ao vivo/Agendada/Encerrada/...)
+           que separa os cards — ver main(). */
+        .secao-status {
+            font-family: 'Archivo', sans-serif;
+            font-weight: 700;
+            font-size: 1.05rem;
+            margin: 1.4rem 0 0.7rem;
+        }
+        .secao-status-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+            color: var(--muted);
+            font-size: 0.9rem;
         }
 
         /* ---------------------------------------------------------------
@@ -413,6 +412,19 @@ def _inject_css() -> None:
             border-radius: 8px !important;
             font-size: 0.78rem !important;
         }
+        /* Botão de lápis — discreto, texto pequeno, sem destaque de cor
+           (não é uma ação "principal" como os botões das casas de apostas). */
+        div[class*="st-key-editor_"] [data-testid="stButton"] button {
+            background: transparent !important;
+            border: none !important;
+            color: var(--muted) !important;
+            font-size: 0.78rem !important;
+            font-weight: 600 !important;
+            padding: 0.15rem 0 !important;
+        }
+        div[class*="st-key-editor_"] [data-testid="stButton"] button:hover {
+            color: var(--lime) !important;
+        }
 
         /* ---------------------------------------------------------------
            Botões das casas de apostas — uma linha só, com "logo"
@@ -457,24 +469,30 @@ def _inject_css() -> None:
             letter-spacing: 0.02em;
         }
 
+        /* bet365 usa texto em vez do SVG traçado (ver BOOKMAKER_BADGES) —
+           paleta oficial: "bet" em branco, "365" em amarelo. */
+        .bookmaker-wordmark-bet365 {
+            color: #fff;
+            font-family: 'Archivo', sans-serif;
+            font-weight: 800;
+            font-size: 1.05rem;
+            letter-spacing: -0.01em;
+        }
+        .bookmaker-wordmark-bet365 .accent {
+            color: #f9dc1c;
+        }
+
         .bookmaker-vazio {
             color: var(--muted);
             font-size: 0.85rem;
         }
 
         /* ---------------------------------------------------------------
-           Sidebar — a mesma tipografia/hierarquia do resto do painel.
+           Popover de filtros (canto superior direito do header) — mesma
+           tipografia/hierarquia do resto do painel.
         --------------------------------------------------------------- */
-        section[data-testid="stSidebar"] {
-            background: var(--card-bg);
-            border-right: 1px solid var(--card-border);
-        }
-        section[data-testid="stSidebar"] h1 {
-            font-size: 1.3rem !important;
-            margin-bottom: 0.2rem;
-        }
-        section[data-testid="stSidebar"] .stMultiSelect label,
-        section[data-testid="stSidebar"] .stDateInput label {
+        div[data-testid="stPopoverBody"] .stMultiSelect label,
+        div[data-testid="stPopoverBody"] .stDateInput label {
             font-family: 'Work Sans', sans-serif;
             color: var(--muted);
             text-transform: uppercase;
@@ -482,11 +500,20 @@ def _inject_css() -> None:
             letter-spacing: 0.04em;
             font-weight: 600;
         }
-        section[data-testid="stSidebar"] .stButton button {
+        div[data-testid="stPopoverBody"] .stButton button {
             background: var(--lime);
             color: #14161a;
             font-weight: 700;
             border: none;
+            border-radius: 10px;
+        }
+        /* O botão que abre o popover ("🔍 Filtros") alinhado à direita, na
+           mesma linha do título — ver _header_e_filtros. */
+        div[data-testid="stPopover"] > button {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            color: #fff;
+            font-weight: 600;
             border-radius: 10px;
         }
 
@@ -603,34 +630,45 @@ def _inject_css() -> None:
     )
 
 
-def _sidebar_filters() -> tuple[list[str], date, date]:
-    st.sidebar.title("Filtros")
+def _header_e_filtros() -> tuple[list[str], date, date]:
+    """
+    Título + filtros na mesma linha do topo, sem sidebar — pedido do
+    usuário pra eliminar o espaço vazio que a sidebar nativa do Streamlit
+    deixava acima dela (existia mesmo movida pra direita via CSS, ver
+    histórico). Os filtros ficam atrás de um st.popover compacto no canto
+    superior direito em vez de ocupar largura fixa da tela o tempo todo.
+    """
+    col_titulo, col_filtro = st.columns([5, 1])
+    with col_titulo:
+        st.markdown('<div class="app-header">Cansadão Apostas</div>', unsafe_allow_html=True)
 
-    status_opcoes = list(STATUS_LABELS.keys())
-    status_labels_sel = st.sidebar.multiselect(
-        "Status",
-        options=[STATUS_LABELS[s] for s in status_opcoes],
-        default=[
-            STATUS_LABELS[BetStatus.AGENDADA.value],
-            STATUS_LABELS[BetStatus.AO_VIVO.value],
-            STATUS_LABELS[BetStatus.ENCERRADA.value],
-        ],
-    )
-    label_to_status = {v: k for k, v in STATUS_LABELS.items()}
-    status_selecionados = [label_to_status[l] for l in status_labels_sel] or status_opcoes
+    with col_filtro:
+        with st.popover("🔍 Filtros", use_container_width=True):
+            status_opcoes = list(STATUS_LABELS.keys())
+            status_labels_sel = st.multiselect(
+                "Status",
+                options=[STATUS_LABELS[s] for s in status_opcoes],
+                default=[
+                    STATUS_LABELS[BetStatus.AGENDADA.value],
+                    STATUS_LABELS[BetStatus.AO_VIVO.value],
+                    STATUS_LABELS[BetStatus.ENCERRADA.value],
+                ],
+            )
+            label_to_status = {v: k for k, v in STATUS_LABELS.items()}
+            status_selecionados = [label_to_status[l] for l in status_labels_sel] or status_opcoes
 
-    hoje = date.today()
-    intervalo = st.sidebar.date_input(
-        "Período (data do jogo)",
-        value=(hoje, hoje.replace(day=min(28, hoje.day)) + pd.Timedelta(days=14)),
-    )
-    if isinstance(intervalo, tuple) and len(intervalo) == 2:
-        data_de, data_ate = intervalo
-    else:
-        data_de = data_ate = intervalo
+            hoje = date.today()
+            intervalo = st.date_input(
+                "Período (data do jogo)",
+                value=(hoje, hoje.replace(day=min(28, hoje.day)) + pd.Timedelta(days=14)),
+            )
+            if isinstance(intervalo, tuple) and len(intervalo) == 2:
+                data_de, data_ate = intervalo
+            else:
+                data_de = data_ate = intervalo
 
-    if st.sidebar.button("🔄 Atualizar agora"):
-        st.rerun()
+            if st.button("🔄 Atualizar agora", use_container_width=True):
+                st.rerun()
 
     return status_selecionados, data_de, data_ate
 
@@ -701,7 +739,10 @@ def _bet_card(bet: Bet) -> None:
         botoes = []
         for slug, info in bet.links.items():
             badge = BOOKMAKER_BADGES.get(slug)
-            if badge:
+            if badge and badge.get("wordmark"):
+                logo_html = '<span class="bookmaker-wordmark-bet365">bet<span class="accent">365</span></span>'
+                cor = badge["cor"]
+            elif badge:
                 logo_html = f'<img class="bookmaker-logo-img" src="{badge["logo"]}" alt="{info.get("nome", "?")}" />'
                 cor = badge["cor"]
             else:
@@ -715,6 +756,9 @@ def _bet_card(bet: Bet) -> None:
         links_html = f'<div class="bookmaker-row">{"".join(botoes)}</div>'
     else:
         links_html = '<div class="bookmaker-vazio">Nenhuma casa de apostas configurada/encontrada.</div>'
+
+    editando_key = f"editando_{bet.id}"
+    editando = st.session_state.get(editando_key, False)
 
     card_html = (
         f'<div class="bet-card">'
@@ -739,33 +783,45 @@ def _bet_card(bet: Bet) -> None:
     )
     st.markdown(card_html, unsafe_allow_html=True)
 
+    # Botão de lápis (mais minimalista que os dois selects sempre visíveis
+    # embaixo do card — pedido do usuário): clique alterna um estado em
+    # session_state que revela os dois selectbox só quando necessário.
     with st.container(key=f"editor_{bet.id}"):
-        col_status, col_resultado = st.columns(2)
-        with col_status:
-            novo_status = st.selectbox(
-                "Atualizar status",
-                options=list(STATUS_LABELS.keys()),
-                format_func=lambda s: STATUS_LABELS[s],
-                index=list(STATUS_LABELS.keys()).index(bet.status) if bet.status in STATUS_LABELS else 0,
-                key=f"status_{bet.id}",
-                label_visibility="collapsed",
-            )
-        with col_resultado:
-            novo_resultado = st.selectbox(
-                "Resultado da aposta",
-                options=list(RESULTADO_LABELS.keys()),
-                format_func=lambda r: RESULTADO_LABELS[r],
-                index=list(RESULTADO_LABELS.keys()).index(bet.resultado) if bet.resultado in RESULTADO_LABELS else 0,
-                key=f"resultado_{bet.id}",
-                label_visibility="collapsed",
-            )
+        if st.button(
+            "✏️ Editar" if not editando else "✕ Fechar",
+            key=f"toggle_editor_{bet.id}",
+            use_container_width=True,
+        ):
+            st.session_state[editando_key] = not editando
+            st.rerun()
 
-    if novo_status != bet.status:
-        update_status(bet.id, novo_status)
-        st.rerun()
-    if novo_resultado != bet.resultado:
-        update_resultado(bet.id, novo_resultado)
-        st.rerun()
+        if editando:
+            col_status, col_resultado = st.columns(2)
+            with col_status:
+                novo_status = st.selectbox(
+                    "Atualizar status",
+                    options=list(STATUS_LABELS.keys()),
+                    format_func=lambda s: STATUS_LABELS[s],
+                    index=list(STATUS_LABELS.keys()).index(bet.status) if bet.status in STATUS_LABELS else 0,
+                    key=f"status_{bet.id}",
+                    label_visibility="collapsed",
+                )
+            with col_resultado:
+                novo_resultado = st.selectbox(
+                    "Resultado da aposta",
+                    options=list(RESULTADO_LABELS.keys()),
+                    format_func=lambda r: RESULTADO_LABELS[r],
+                    index=list(RESULTADO_LABELS.keys()).index(bet.resultado) if bet.resultado in RESULTADO_LABELS else 0,
+                    key=f"resultado_{bet.id}",
+                    label_visibility="collapsed",
+                )
+
+            if novo_status != bet.status:
+                update_status(bet.id, novo_status)
+                st.rerun()
+            if novo_resultado != bet.resultado:
+                update_resultado(bet.id, novo_resultado)
+                st.rerun()
 
 
 def _metrics_grid(itens: list[tuple[str, str, str | None]], destaque: bool = False) -> None:
@@ -799,9 +855,7 @@ def _metrics_grid(itens: list[tuple[str, str, str | None]], destaque: bool = Fal
 def main() -> None:
     _inject_css()
 
-    st.markdown('<div class="app-header">Cansadão Apostas</div>', unsafe_allow_html=True)
-
-    status_sel, data_de, data_ate = _sidebar_filters()
+    status_sel, data_de, data_ate = _header_e_filtros()
 
     apostas: list[Bet] = []
     for status in status_sel:
@@ -812,13 +866,25 @@ def main() -> None:
                 date_to=str(data_ate) if data_ate else None,
             )
         )
-    # remove duplicatas (caso um bet apareça em mais de um filtro) e ordena por data
+    # remove duplicatas (caso um bet apareça em mais de um filtro)
     apostas_unicas = {b.id: b for b in apostas}.values()
     # data_hora vem timezone-aware (UTC) do banco — datetime.max é naive, e
     # comparar os dois quebra com TypeError; precisa do mesmo tipo aqui.
     _sem_data = datetime.max.replace(tzinfo=timezone.utc)
+    # Prioridade pedida pelo usuário: ao vivo primeiro (mais urgente/ação
+    # imediata), depois agendada, depois encerrada (já resolvida); erro de
+    # extração/não encontrada por último (menos relevantes pro dia a dia).
+    # Dentro de cada grupo, mais recente/próximo primeiro.
+    _PRIORIDADE_STATUS = {
+        BetStatus.AO_VIVO.value: 0,
+        BetStatus.AGENDADA.value: 1,
+        BetStatus.ENCERRADA.value: 2,
+        BetStatus.NAO_ENCONTRADA.value: 3,
+        BetStatus.ERRO_EXTRACAO.value: 3,
+    }
     apostas_ordenadas = sorted(
-        apostas_unicas, key=lambda b: b.data_hora or _sem_data
+        apostas_unicas,
+        key=lambda b: (_PRIORIDADE_STATUS.get(b.status, 9), b.data_hora or _sem_data),
     )
 
     stats = _calcular_estatisticas(apostas_ordenadas)
@@ -855,20 +921,37 @@ def main() -> None:
     st.divider()
 
     if not apostas_ordenadas:
-        st.info("Nenhuma aposta encontrada com os filtros atuais. Ajuste os filtros na barra lateral.")
+        st.info("Nenhuma aposta encontrada com os filtros atuais. Ajuste os filtros no botão de Filtros.")
         return
 
-    # 2 jogos por linha no desktop pra aproveitar melhor o espaço horizontal
-    # (o media query mobile força de volta pra 1 coluna — ver CSS de
-    # stHorizontalBlock em _inject_css). st.columns aninhado dentro de
-    # cada _bet_card (o editor de status/resultado) funciona normalmente
-    # aqui, é só mais 1 nível de aninhamento.
-    for i in range(0, len(apostas_ordenadas), 2):
-        par = apostas_ordenadas[i:i + 2]
-        colunas = st.columns(2)
-        for coluna, bet in zip(colunas, par):
-            with coluna:
-                _bet_card(bet)
+    # Separa em seções por status (em vez de uma lista só misturada quando
+    # vários filtros estão ativos ao mesmo tempo) — mesma ordem de
+    # prioridade de _PRIORIDADE_STATUS. groupby precisa da lista já
+    # ordenada por essa mesma chave, o que apostas_ordenadas já garante.
+    grupos: list[tuple[str, list[Bet]]] = []
+    for bet in apostas_ordenadas:
+        if grupos and grupos[-1][0] == bet.status:
+            grupos[-1][1].append(bet)
+        else:
+            grupos.append((bet.status, [bet]))
+
+    for status, apostas_do_grupo in grupos:
+        st.markdown(
+            f'<div class="secao-status">{STATUS_LABELS.get(status, status)} '
+            f'<span class="secao-status-count">({len(apostas_do_grupo)})</span></div>',
+            unsafe_allow_html=True,
+        )
+        # 2 jogos por linha no desktop pra aproveitar melhor o espaço
+        # horizontal (o media query mobile força de volta pra 1 coluna —
+        # ver CSS de stHorizontalBlock em _inject_css). st.columns
+        # aninhado dentro de cada _bet_card (o editor de status/resultado)
+        # funciona normalmente aqui, é só mais 1 nível de aninhamento.
+        for i in range(0, len(apostas_do_grupo), 2):
+            par = apostas_do_grupo[i:i + 2]
+            colunas = st.columns(2)
+            for coluna, bet in zip(colunas, par):
+                with coluna:
+                    _bet_card(bet)
 
 
 if __name__ == "__main__":
