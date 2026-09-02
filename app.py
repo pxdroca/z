@@ -180,10 +180,13 @@ def _inject_css() -> None:
         /* ---------------------------------------------------------------
            Header nativa do Streamlit (barra vazia com Deploy/menu ⋮) —
            some por completo; o app tem seu próprio cabeçalho (.app-header).
-           Idem para a badge "Manage app"/perfil do Streamlit Cloud
-           (canto inferior direito) e o menu de 3 pontos (⋮) do topo — só
-           aparecem pra quem é dono do app, nunca pros visitantes, mas
-           também não têm função nenhuma pro uso deste painel.
+           Idem para a badge "Hosted with Streamlit"/"Manage app" (canto
+           inferior direito, id="ViewerBadge_container" no HTML real — o
+           seletor data-testid usado antes não pegava esse elemento) e o
+           menu de 3 pontos (⋮) do topo — só aparecem pro dono do app,
+           nunca pros visitantes, mas não têm função pro uso deste painel.
+           [class*=...] cobre variações de nome de classe que o Streamlit
+           muda entre versões, então é mais robusto que um único seletor.
         --------------------------------------------------------------- */
         header[data-testid="stHeader"],
         div[data-testid="stToolbar"],
@@ -192,11 +195,24 @@ def _inject_css() -> None:
         #MainMenu,
         footer,
         .stAppDeployButton,
-        [data-testid="stAppViewerBadge"] {
+        [data-testid="stAppViewerBadge"],
+        #ViewerBadge_container,
+        div[class*="viewerBadge"] {
             display: none !important;
         }
+        /* Botão de recolher/expandir a sidebar (a seta "‹"/"›" no canto
+           superior esquerdo) — mantém a função, só reposiciona pra não
+           flutuar solto sobre o conteúdo com um espaço vazio enorme acima
+           do header (era o que causava o espaçamento excessivo no topo). */
+        div[data-testid="stSidebarCollapsedControl"],
+        button[data-testid="stBaseButton-headerNoPadding"] {
+            top: 0.6rem !important;
+        }
         div[data-testid="stAppViewContainer"] > div:first-child {
-            padding-top: 1.5rem;
+            padding-top: 0.5rem;
+        }
+        .main .block-container {
+            padding-top: 2.5rem !important;
         }
 
         /* ---------------------------------------------------------------
@@ -207,12 +223,7 @@ def _inject_css() -> None:
             font-weight: 800;
             font-size: 2.1rem;
             letter-spacing: -0.02em;
-            margin-bottom: 0.1rem;
-        }
-        .app-subheader {
-            color: var(--muted);
-            font-family: 'Work Sans', sans-serif;
-            margin-bottom: 1.2rem;
+            margin-bottom: 1rem;
         }
 
         /* ---------------------------------------------------------------
@@ -475,26 +486,43 @@ def _inject_css() -> None:
         }
 
         /* ---------------------------------------------------------------
-           Grid de métricas do topo (Total, Green, Red, Odd média etc) —
-           HTML/CSS puro (não st.columns/st.metric) pra controlar quantas
-           colunas cabem também no mobile (ver _metrics_grid() e o media
-           query abaixo, que reduz de 5 pra 3 colunas em telas estreitas
-           em vez de empilhar 1 métrica por linha).
+           Grid de métricas do topo — HTML/CSS puro (não st.columns/
+           st.metric) pra controlar quantas colunas cabem também no mobile
+           (ver _metrics_grid() e o media query abaixo). Minimalista de
+           propósito (sem cards/fundo/borda — pedido do usuário): a
+           hierarquia vem só de tamanho/peso de fonte.
+
+           Dois grupos com pesos visuais diferentes:
+             - .metrics-grid-destaque (Green/Red/Unidades — o resultado
+               financeiro, o que mais importa) — 3 colunas, fonte maior.
+             - .metrics-grid comum (Total/Ao vivo/Odd média/Void/Pendente/
+               Taxa de acerto — contexto geral) — mais colunas, mais
+               discreto, uma linha fina acima separa visualmente dos itens
+               em destaque sem precisar de caixinha.
         --------------------------------------------------------------- */
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 0.9rem 0.6rem;
-            margin-bottom: 0.6rem;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 0.7rem 0.5rem;
+            margin-bottom: 0.9rem;
+            padding-top: 0.7rem;
+            border-top: 1px solid var(--card-border);
+        }
+        .metrics-grid-destaque {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.5rem;
+            margin-bottom: 0;
+            padding-top: 0;
+            border-top: none;
         }
         .metric-cell { min-width: 0; }
         .metric-label {
             font-family: 'Work Sans', sans-serif;
             color: var(--muted);
             text-transform: uppercase;
-            font-size: 0.68rem;
+            font-size: 0.66rem;
             letter-spacing: 0.04em;
-            margin-bottom: 0.1rem;
+            margin-bottom: 0.15rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -502,9 +530,11 @@ def _inject_css() -> None:
         .metric-valor {
             font-family: 'JetBrains Mono', monospace;
             font-weight: 700;
-            font-size: 1.3rem;
+            font-size: 1.05rem;
             line-height: 1.15;
         }
+        .metrics-grid-destaque .metric-label { font-size: 0.72rem; }
+        .metrics-grid-destaque .metric-valor { font-size: 1.9rem; }
         .metric-delta {
             font-family: 'Work Sans', sans-serif;
             font-size: 0.72rem;
@@ -526,9 +556,10 @@ def _inject_css() -> None:
 
             .metrics-grid {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
-                gap: 0.7rem 0.5rem;
+                gap: 0.6rem 0.4rem;
             }
-            .metric-valor { font-size: 1.05rem; }
+            .metric-valor { font-size: 0.95rem; }
+            .metrics-grid-destaque .metric-valor { font-size: 1.5rem; }
 
             div[data-testid="stHorizontalBlock"]:not([class*="editor_"] *) {
                 flex-direction: column !important;
@@ -725,7 +756,7 @@ def _bet_card(bet: Bet) -> None:
         st.rerun()
 
 
-def _metrics_grid(itens: list[tuple[str, str, str | None]]) -> None:
+def _metrics_grid(itens: list[tuple[str, str, str | None]], destaque: bool = False) -> None:
     """
     Grid de métricas em HTML/CSS puro (não st.columns/st.metric) — no
     desktop fica em linha(s) de várias colunas, mas no mobile também usa um
@@ -733,7 +764,13 @@ def _metrics_grid(itens: list[tuple[str, str, str | None]]) -> None:
     o comportamento padrão de st.columns em telas estreitas e deixava o
     topo do painel comprido demais (muito scroll até o primeiro jogo).
     Cada item é (label, valor, delta_opcional).
+
+    `destaque=True` (usado só pro grupo Green/Red/Unidades, o resultado
+    financeiro — ver main()) aumenta o peso visual (fonte maior) SEM usar
+    cards com fundo/borda — só hierarquia tipográfica, visual minimalista
+    pedido pelo usuário em vez de caixinhas.
     """
+    classe_grid = "metrics-grid metrics-grid-destaque" if destaque else "metrics-grid"
     celulas = []
     for label, valor, delta in itens:
         delta_html = f'<div class="metric-delta">{delta}</div>' if delta else ""
@@ -744,17 +781,13 @@ def _metrics_grid(itens: list[tuple[str, str, str | None]]) -> None:
             f"{delta_html}"
             f"</div>"
         )
-    st.markdown(f'<div class="metrics-grid">{"".join(celulas)}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="{classe_grid}">{"".join(celulas)}</div>', unsafe_allow_html=True)
 
 
 def main() -> None:
     _inject_css()
 
-    st.markdown('<div class="app-header">🎾 Cansadão Apostas</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="app-subheader">Apostas capturadas automaticamente do grupo de tips, cruzadas com a Superbet.</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="app-header">Cansadão Apostas</div>', unsafe_allow_html=True)
 
     status_sel, data_de, data_ate = _sidebar_filters()
 
@@ -778,21 +811,29 @@ def main() -> None:
         f"{(sum(b.odd for b in apostas_ordenadas if b.odd) / max(1, sum(1 for b in apostas_ordenadas if b.odd))):.2f}"
         if any(b.odd for b in apostas_ordenadas) else "—"
     )
+    # Resultado financeiro (o que mais importa: ganhando ou perdendo) em
+    # destaque tipográfico; resumo geral (contexto) abaixo, mais discreto —
+    # separação visual pedida pelo usuário, sem usar cards com fundo/borda.
     _metrics_grid(
         [
-            ("Total no filtro", str(len(apostas_ordenadas)), None),
-            ("Ao vivo agora", str(sum(1 for b in apostas_ordenadas if b.status == BetStatus.AO_VIVO.value)), None),
-            ("Odd média", odd_media, None),
             ("✅ Green", str(stats["green"]), None),
             ("❌ Red", str(stats["red"]), None),
-            ("➖ Void", str(stats["void"]), None),
-            ("⏳ Pendente", str(stats["pendente"]), None),
-            ("Taxa de acerto", f"{stats['taxa_acerto']:.1f}%" if stats["taxa_acerto"] is not None else "—", None),
             (
                 "Unidades (líquido)",
                 f"{stats['unidades_liquidas']:+.2f}",
                 f"ROI {stats['roi']:.1f}%" if stats["roi"] is not None else None,
             ),
+        ],
+        destaque=True,
+    )
+    _metrics_grid(
+        [
+            ("Total no filtro", str(len(apostas_ordenadas)), None),
+            ("Ao vivo agora", str(sum(1 for b in apostas_ordenadas if b.status == BetStatus.AO_VIVO.value)), None),
+            ("Odd média", odd_media, None),
+            ("➖ Void", str(stats["void"]), None),
+            ("⏳ Pendente", str(stats["pendente"]), None),
+            ("Taxa de acerto", f"{stats['taxa_acerto']:.1f}%" if stats["taxa_acerto"] is not None else "—", None),
         ]
     )
 
