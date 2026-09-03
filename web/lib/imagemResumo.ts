@@ -123,19 +123,22 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 const LARGURA = 1080; // formato vertical estilo Stories — 1080 é a largura padrão de export mobile
 const PAD = 56;
 const LINHA_ALTURA = 132;
-const HEADER_ALTURA = 220;
-/** Faixa de estatísticas entre o header e a lista. */
-const STATS_ALTURA = 150;
+/* Header mais alto porque agora abriga o grid 2x2 de estatísticas à
+   direita do título (antes elas ficavam numa faixa própria de 150px
+   abaixo, que custava altura e deixava um vazio ao lado do título). */
+const HEADER_ALTURA = 246;
 const FOOTER_ALTURA = 90;
 
 /**
- * Desenha a faixa de estatísticas do dia (green, red, unidades, taxa de
- * acerto) logo abaixo do título.
+ * Desenha as estatísticas do dia num grid 2x2 à DIREITA do título, em vez
+ * de uma faixa de 4 colunas abaixo dele.
  *
- * As unidades trazem o ROI como linha secundária, no lugar de virar um 5º
- * card: são a mesma informação (retorno) em unidades e em %, e 4 colunas
- * em 1080px deixam cada número com folga pra ser lido de longe — com 5 o
- * texto começaria a apertar.
+ * Ganha altura (a faixa custava 150px de imagem) e aproveita o vazio que
+ * sobrava ao lado de "Jogos do dia". Cada célula é um cartão de vidro
+ * escuro — mesmo vocabulário dos cards de métrica do painel.
+ *
+ * As unidades trazem o ROI como linha secundária, no lugar de uma 5ª
+ * célula: são a mesma informação (retorno) em unidades e em %.
  *
  * Os números vêm de calcularEstatisticas, o MESMO cálculo dos cards do
  * painel, pra imagem e tela nunca divergirem.
@@ -143,7 +146,7 @@ const FOOTER_ALTURA = 90;
 function desenharEstatisticas(ctx: CanvasRenderingContext2D, jogos: Bet[], y: number): void {
   const stats = calcularEstatisticas(jogos);
 
-  const colunas: { label: string; valor: string; sub: string | null; cor: string }[] = [
+  const celulas: { label: string; valor: string; sub: string | null; cor: string }[] = [
     { label: "GREEN", valor: String(stats.green), sub: null, cor: "#34d399" },
     { label: "RED", valor: String(stats.red), sub: null, cor: "#f87171" },
     {
@@ -153,27 +156,28 @@ function desenharEstatisticas(ctx: CanvasRenderingContext2D, jogos: Bet[], y: nu
       cor: stats.unidadesLiquidas >= 0 ? "#34d399" : "#f87171",
     },
     {
-      // Sem linha secundária: green e red já estão nas duas primeiras
-      // colunas, então "3/13" era a mesma informação uma terceira vez.
-      label: "TAXA DE ACERTO",
+      // Sem linha secundária: green e red já estão nas outras células,
+      // então "3/13" seria a mesma informação uma terceira vez.
+      label: "ACERTO",
       valor: stats.taxaAcerto !== null ? `${stats.taxaAcerto.toFixed(0)}%` : "—",
       sub: null,
       cor: "#a78bfa",
     },
   ];
 
-  const larguraUtil = LARGURA - PAD * 2;
-  const larguraCol = larguraUtil / colunas.length;
-  const alturaCaixa = STATS_ALTURA - 34;
+  // Bloco 2x2 ancorado na borda direita, alinhado com o topo do título.
+  const larguraCel = 190;
+  const alturaCel = 82;
+  const gap = 10;
+  const xBase = LARGURA - PAD - (larguraCel * 2 + gap);
 
-  colunas.forEach((col, i) => {
-    const x = PAD + i * larguraCol;
-    const cx = x + larguraCol / 2;
+  celulas.forEach((col, i) => {
+    const x = xBase + (i % 2) * (larguraCel + gap);
+    const cy = y + Math.floor(i / 2) * (alturaCel + gap);
+    const cx = x + larguraCel / 2;
 
-    // Cartão de vidro escuro, com um fio da cor de acento no topo — o
-    // mesmo vocabulário dos cards de métrica do painel.
     ctx.fillStyle = "rgba(255,255,255,0.038)";
-    roundRect(ctx, x + 6, y, larguraCol - 12, alturaCaixa, 18);
+    roundRect(ctx, x, cy, larguraCel, alturaCel, 16);
     ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.07)";
     ctx.lineWidth = 1;
@@ -181,18 +185,19 @@ function desenharEstatisticas(ctx: CanvasRenderingContext2D, jogos: Bet[], y: nu
 
     ctx.textAlign = "center";
 
+    // Offsets a partir de cy (o topo DESTA célula), não de y.
     ctx.fillStyle = "#6b7280";
-    ctx.font = "700 19px Inter, sans-serif";
-    ctx.fillText(col.label, cx, y + 34);
+    ctx.font = "700 16px Inter, sans-serif";
+    ctx.fillText(col.label, cx, cy + 26);
 
     ctx.fillStyle = col.cor;
-    ctx.font = "800 44px Inter, sans-serif";
-    ctx.fillText(col.valor, cx, y + 84);
+    ctx.font = "800 34px Inter, sans-serif";
+    ctx.fillText(col.valor, cx, cy + 62);
 
     if (col.sub) {
       ctx.fillStyle = "#6b7280";
-      ctx.font = "500 17px Inter, sans-serif";
-      ctx.fillText(col.sub, cx, y + 106);
+      ctx.font = "500 15px Inter, sans-serif";
+      ctx.fillText(col.sub, cx, cy + 77);
     }
   });
 
@@ -208,7 +213,7 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
   // parecer vertical; o espaço sobrando fica como respiro abaixo do rodapé
   // em vez de deixar a imagem quase quadrada.
   const alturaConteudo =
-    HEADER_ALTURA + STATS_ALTURA + Math.max(jogos.length, 1) * LINHA_ALTURA + FOOTER_ALTURA;
+    HEADER_ALTURA + Math.max(jogos.length, 1) * LINHA_ALTURA + FOOTER_ALTURA;
   const alturaMinimaRetrato = Math.round((LARGURA * 16) / 9);
   const altura = Math.max(alturaConteudo, alturaMinimaRetrato);
 
@@ -248,11 +253,10 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
   const dataCapitalizada = hojeLabel.charAt(0).toUpperCase() + hojeLabel.slice(1);
   ctx.fillText(dataCapitalizada, PAD, 178);
 
-  // --- faixa de estatísticas (logo abaixo do título) ---
-  desenharEstatisticas(ctx, jogos, HEADER_ALTURA - 24);
+  // --- estatísticas: grid 2x2 à direita do título ---
+  desenharEstatisticas(ctx, jogos, 56);
 
-  // Início da lista, já descontando a faixa de estatísticas.
-  const listaY = HEADER_ALTURA + STATS_ALTURA;
+  const listaY = HEADER_ALTURA;
 
   ctx.strokeStyle = "rgba(255,255,255,0.08)";
   ctx.lineWidth = 1;
@@ -283,11 +287,14 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
 
     const cyCentro = y + LINHA_ALTURA / 2;
 
-    // ícone do esporte, num círculo colorido à esquerda — cor própria por
-    // esporte (âmbar/tênis, azul/basquete) pra ser reconhecível de relance,
-    // sem precisar ler o nome do confronto.
-    const corEsporte = bet.esporte === "basquete" ? "#60a5fa" : "#fbbf24";
-    const fundoEsporte = bet.esporte === "basquete" ? "rgba(96, 165, 250, 0.14)" : "rgba(251, 191, 36, 0.14)";
+    // Ícone do esporte num círculo colorido à esquerda, na COR REAL DA
+    // BOLA: laranja pro basquete, amarelo-limão pro tênis. Antes o
+    // basquete era azul, que não lembra nada da bola. As duas cores são
+    // distinguíveis entre si e não colidem com as dos badges de resultado
+    // (verde/vermelho/âmbar do "ao vivo" ficam à direita, longe do ícone).
+    const corEsporte = bet.esporte === "basquete" ? "#f97316" : "#d4e34a";
+    const fundoEsporte =
+      bet.esporte === "basquete" ? "rgba(249, 115, 22, 0.16)" : "rgba(212, 227, 74, 0.14)";
     ctx.fillStyle = fundoEsporte;
     ctx.beginPath();
     ctx.arc(PAD + 34, cyCentro, 34, 0, Math.PI * 2);

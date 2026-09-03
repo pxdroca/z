@@ -2,12 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { grupoDaBet, type GrupoId } from "@/lib/agrupamento";
 import { canvasParaBlob, desenharResumoDoDia } from "@/lib/imagemResumo";
 import type { Bet } from "@/lib/types";
 import { CopyIcon, DownloadIcon, ImageIcon, ShareIcon, XIcon } from "./icons";
 import styles from "./GerarImagemResumo.module.css";
 
 const NOME_ARQUIVO = "jogos-do-dia.png";
+
+/** Filtro de quais apostas entram na imagem. "todas" mantém o
+ *  comportamento anterior; os demais recortam por grupo (o mesmo
+ *  agrupamento do painel, ver lib/agrupamento.ts). */
+type FiltroImagem = "todas" | GrupoId;
+
+const OPCOES_FILTRO: { id: FiltroImagem; label: string }[] = [
+  { id: "todas", label: "Todas" },
+  { id: "green", label: "Green" },
+  { id: "red", label: "Red" },
+  { id: "ao_vivo", label: "Ao vivo" },
+  { id: "pendentes", label: "Pendentes" },
+];
 
 /**
  * O navegador atual consegue copiar imagem e compartilhar arquivo?
@@ -55,12 +69,16 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
   const blobRef = useRef<Blob | null>(null);
   const avisoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const gerar = useCallback(async () => {
+  const [filtro, setFiltro] = useState<FiltroImagem>("todas");
+
+  const gerar = useCallback(async (alvo: FiltroImagem) => {
     setGerando(true);
     setAberto(true);
     setAviso(null);
     try {
-      const canvas = desenharResumoDoDia(bets);
+      const selecionadas =
+        alvo === "todas" ? bets : bets.filter((b) => grupoDaBet(b) === alvo);
+      const canvas = desenharResumoDoDia(selecionadas);
       const blob = await canvasParaBlob(canvas);
       blobRef.current = blob;
       const url = URL.createObjectURL(blob);
@@ -143,7 +161,7 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
     <>
       <button
         className={styles.trigger}
-        onClick={gerar}
+        onClick={() => gerar(filtro)}
         aria-label="Gerar imagem dos jogos do dia"
         title="Gerar imagem dos jogos do dia"
       >
@@ -165,6 +183,25 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
               </button>
             </div>
 
+            {/* Filtro: regera a imagem só com o grupo escolhido. Mesmo
+                agrupamento do painel, então "Green" aqui e "Green" lá
+                significam exatamente a mesma coisa. */}
+            <div className={styles.filtros}>
+              {OPCOES_FILTRO.map((o) => (
+                <button
+                  key={o.id}
+                  className={o.id === filtro ? `${styles.chip} ${styles.chipAtivo}` : styles.chip}
+                  onClick={() => {
+                    setFiltro(o.id);
+                    void gerar(o.id);
+                  }}
+                  aria-pressed={o.id === filtro}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+
             <div className={styles.preview}>
               {gerando ? (
                 <div className={styles.carregando}>Gerando imagem…</div>
@@ -179,20 +216,31 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
                 {aviso ? <div className={styles.aviso}>{aviso}</div> : null}
                 <div className={styles.acoesBotoes}>
                   {capacidades.copiar ? (
-                    <button className={styles.acaoSecundaria} onClick={copiar}>
-                      <CopyIcon size={15} />
-                      Copiar
+                    <button className={styles.acaoSecundaria} onClick={copiar} aria-label="Copiar imagem" title="Copiar">
+                      <CopyIcon size={16} />
+                      <span className={styles.rotuloAcao}>Copiar</span>
                     </button>
                   ) : null}
                   {capacidades.compartilhar ? (
-                    <button className={styles.acaoSecundaria} onClick={compartilhar}>
-                      <ShareIcon size={15} />
-                      Compartilhar
+                    <button
+                      className={styles.acaoSecundaria}
+                      onClick={compartilhar}
+                      aria-label="Compartilhar imagem"
+                      title="Compartilhar"
+                    >
+                      <ShareIcon size={16} />
+                      <span className={styles.rotuloAcao}>Compartilhar</span>
                     </button>
                   ) : null}
-                  <a href={imagemUrl} download={NOME_ARQUIVO} className={styles.baixarButton}>
-                    <DownloadIcon size={15} />
-                    Baixar
+                  <a
+                    href={imagemUrl}
+                    download={NOME_ARQUIVO}
+                    className={styles.baixarButton}
+                    aria-label="Baixar imagem"
+                    title="Baixar"
+                  >
+                    <DownloadIcon size={16} />
+                    <span className={styles.rotuloAcao}>Baixar</span>
                   </a>
                 </div>
               </div>

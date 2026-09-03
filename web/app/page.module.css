@@ -96,9 +96,26 @@
   }
 }
 
+/* Caixa de tamanho FIXO pro ícone, girando ou não.
+   Duas coisas moviam o ícone quando a animação começava:
+     1. o span só ganhava display:flex junto com a animação, e a troca
+        inline->flex mudava o alinhamento pela baseline;
+     2. a bounding box de um elemento em rotação CRESCE (um quadrado a
+        45° fica ~1.41x maior) — medido: 15px parado, 19.7px girando — e
+        como o botão centraliza o conteúdo, o ícone subia.
+   Fixando largura/altura, a rotação acontece dentro de uma caixa que não
+   muda de tamanho, então nada se desloca. */
+.refreshIcone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
 /* Gira só enquanto está carregando — feedback de que a ação aconteceu. */
 .refreshGirando {
-  display: flex;
   animation: girar 0.9s linear infinite;
 }
 

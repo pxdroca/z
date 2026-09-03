@@ -232,7 +232,7 @@ export default function Home() {
             aria-label="Atualizar apostas"
             title="Atualizar"
           >
-            <span className={carregando ? styles.refreshGirando : undefined}>
+            <span className={carregando ? `${styles.refreshIcone} ${styles.refreshGirando}` : styles.refreshIcone}>
               <RefreshIcon size={15} />
             </span>
           </button>

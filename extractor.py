@@ -710,6 +710,29 @@ def parse_free_text(texto: str) -> ExtractedBet:
             except ValueError:
                 continue
 
+    # Cinto de segurança: nome de jogador SEM odd não é tip.
+    #
+    # O mesmo guard já existia em extract_with_gemini, mas faltava aqui —
+    # e este parser é quem roda quando o Gemini estoura a cota diária.
+    # Bug real (03/09/2026): "Ah, também teremos aquela odd 100 diária."
+    # (mensagem de fim de dia do tipster) virou
+    # jogador1="também teremos" / mercado="também teremos vencer a
+    # partida" e gerou notificação no Telegram. Note que a odd NÃO foi
+    # extraída — "odd 100" sem casas decimais não casa nenhum padrão, e é
+    # justamente isso que denuncia que o texto é conversa, não aposta.
+    #
+    # jogador1 vindo de find_favorite_only é heurístico (pega o que estiver
+    # antes da odd); sem uma odd de verdade não há o que ancorá-lo, então
+    # o certo é descartar em vez de inventar um confronto. Só vale pra
+    # texto puro: com imagem, quem manda são os nomes lidos do print.
+    if odd is None and jogador1 and not jogador2 and not _MARKET_KEYWORDS.search(texto):
+        logger.debug(
+            "Texto sem odd e sem mercado explícito (%r) — descartando jogador1=%r "
+            "(provável mensagem de conversa, não tip).", texto[:80], jogador1,
+        )
+        jogador1 = None
+        mercado = None
+
     confianca = 0.0
     if jogador1 and jogador2:
         confianca += 0.5
