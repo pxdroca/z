@@ -30,6 +30,7 @@ jobs:
 
       - name: Run fix script
         env:
+          PYTHONPATH: ${{ github.workspace }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BOOKMAKERS: ${{ vars.BOOKMAKERS }}
           SUPERBET_BASE_URL: ${{ vars.SUPERBET_BASE_URL }}
