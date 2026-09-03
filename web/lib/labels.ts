@@ -8,7 +8,7 @@ import type { BetStatus, ResultadoAposta } from "./types";
 export const STATUS_LABEL: Record<BetStatus, string> = {
   agendada: "Agendada",
   ao_vivo: "Ao vivo",
-  nao_encontrada: "Não encontrada na Superbet",
+  nao_encontrada: "Não encontrada",
   erro_extracao: "Erro na extração",
   encerrada: "Encerrada",
 };

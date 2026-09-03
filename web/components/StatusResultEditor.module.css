@@ -1,3 +1,14 @@
+@keyframes editor-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .editor {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
@@ -7,6 +18,7 @@
   margin-bottom: 0.9rem;
   display: flex;
   gap: 0.6rem;
+  animation: editor-slide-in 0.18s ease-out;
 }
 
 .select {
@@ -19,4 +31,25 @@
   color: var(--text);
   font-size: 0.78rem;
   padding: 0.3rem 0.5rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.select:hover:not(:disabled) {
+  border-color: rgba(215, 242, 77, 0.4);
+}
+
+.select:focus-visible {
+  outline: none;
+  border-color: var(--lime);
+}
+
+.select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor {
+    animation: none;
+  }
 }

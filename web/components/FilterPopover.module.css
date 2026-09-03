@@ -15,11 +15,31 @@
   font-size: 0.9rem;
   border-radius: 10px;
   padding: 0.5rem 1rem;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.trigger:hover {
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .triggerAberto {
   border-color: var(--lime);
   color: var(--lime);
+}
+
+.triggerAberto:hover {
+  border-color: var(--lime);
+}
+
+@keyframes panel-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .panel {
@@ -34,6 +54,14 @@
   border-radius: 12px;
   padding: 1rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: panel-fade-in 0.16s ease-out;
+  transform-origin: top right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
 }
 
 @media (max-width: 640px) {
@@ -85,6 +113,11 @@
   font-size: 0.8rem;
   color: var(--lime);
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.statusChip:hover {
+  border-color: rgba(215, 242, 77, 0.4);
 }
 
 .statusChip input {
@@ -122,4 +155,13 @@
   border: none;
   border-radius: 10px;
   padding: 0.55rem;
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.refreshButton:hover {
+  filter: brightness(1.08);
+}
+
+.refreshButton:active {
+  transform: scale(0.98);
 }

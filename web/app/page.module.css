@@ -42,6 +42,40 @@
   gap: 1.2rem;
 }
 
+@keyframes card-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Entrada suave e escalonada dos cards quando a lista carrega, em vez de
+   aparecer tudo de uma vez ("pop") — refinamento visual pedido pelo
+   usuário. nth-child cobre só os primeiros (o delay pra além disso vira
+   imperceptível/desnecessário). */
+.cardsGrid > * {
+  animation: card-fade-in 0.3s ease-out backwards;
+}
+.cardsGrid > *:nth-child(1) {
+  animation-delay: 0s;
+}
+.cardsGrid > *:nth-child(2) {
+  animation-delay: 0.04s;
+}
+.cardsGrid > *:nth-child(3) {
+  animation-delay: 0.08s;
+}
+.cardsGrid > *:nth-child(4) {
+  animation-delay: 0.12s;
+}
+.cardsGrid > *:nth-child(n + 5) {
+  animation-delay: 0.16s;
+}
+
 .emptyState {
   color: var(--muted);
   padding: 2rem 0;
@@ -50,6 +84,12 @@
 .loadingState {
   color: var(--muted);
   padding: 2rem 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardsGrid > * {
+    animation: none;
+  }
 }
 
 @media (max-width: 640px) {

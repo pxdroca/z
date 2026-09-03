@@ -28,7 +28,10 @@ function StatusIcon({ status }: { status: BetStatus }) {
     case "agendada":
       return <DotIcon color="var(--green)" />;
     case "ao_vivo":
-      return <DotIcon color="var(--red)" />;
+      // Pulso de "live" (halo transparente crescendo/desvanecendo atrás
+      // do ponto sólido) — pedido do usuário, mesmo efeito de indicador
+      // ao vivo comum em players de vídeo.
+      return <DotIcon color="var(--red)" pulse />;
     case "encerrada":
       return <SquareIcon color="var(--muted)" />;
     default:
@@ -47,7 +50,9 @@ function ResultadoIcon({ resultado }: { resultado: ResultadoAposta }) {
     case "cashout":
       return <CoinIcon color="var(--amber)" />;
     default:
-      return <HourglassIcon color="var(--lime)" />;
+      // Rotação suave e contínua — pedido do usuário ("movimento de
+      // rotação de uma ampulheta, movimento suave").
+      return <HourglassIcon color="var(--lime)" spin />;
   }
 }
 

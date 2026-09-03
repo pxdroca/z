@@ -26,9 +26,15 @@ export function BookmakerButtons({ links }: { links: Bet["links"] }) {
 
         let conteudo: React.ReactNode;
         if (badge?.wordmark) {
+          // Bug real corrigido aqui: className="accent" (string literal)
+          // nunca batia com o seletor ".bookmakerWordmarkBet365 .accent"
+          // do CSS Module (que vira uma classe com hash em build) — o
+          // "365" nunca recebia a cor amarela, ficava branco igual o
+          // "bet" (confirmado via devtools em produção). styles.accent é
+          // o nome de classe real gerado pelo Module.
           conteudo = (
             <span className={styles.bookmakerWordmarkBet365}>
-              bet<span className="accent">365</span>
+              bet<span className={styles.accent}>365</span>
             </span>
           );
         } else if (badge?.logo) {

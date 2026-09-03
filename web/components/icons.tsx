@@ -40,9 +40,9 @@ export function MinusIcon({ color = "currentColor", size = 14 }: IconProps) {
   );
 }
 
-export function HourglassIcon({ color = "currentColor", size = 14 }: IconProps) {
+export function HourglassIcon({ color = "currentColor", size = 14, spin = false }: IconProps & { spin?: boolean }) {
   return (
-    <svg {...base(size)} stroke={color}>
+    <svg {...base(size)} stroke={color} className={spin ? "icon-spin" : undefined}>
       <path d="M5 22h14" />
       <path d="M5 2h14" />
       <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" />
@@ -61,10 +61,21 @@ export function CoinIcon({ color = "currentColor", size = 14 }: IconProps) {
   );
 }
 
-export function DotIcon({ color = "currentColor", size = 10 }: IconProps) {
+export function DotIcon({ color = "currentColor", size = 10, pulse = false }: IconProps & { pulse?: boolean }) {
+  if (!pulse) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 10 10">
+        <circle cx="5" cy="5" r="5" fill={color} />
+      </svg>
+    );
+  }
+  // "Live" real: um halo transparente pulsa (escala + desvanece) atrás do
+  // ponto sólido, que fica parado — efeito clássico de indicador ao vivo,
+  // não a bolinha inteira mudando de tamanho.
   return (
-    <svg width={size} height={size} viewBox="0 0 10 10">
-      <circle cx="5" cy="5" r="5" fill={color} />
+    <svg width={size * 2} height={size * 2} viewBox="0 0 20 20" style={{ overflow: "visible" }}>
+      <circle cx="10" cy="10" r="5" fill={color} className="dot-pulse-halo" />
+      <circle cx="10" cy="10" r="5" fill={color} />
     </svg>
   );
 }

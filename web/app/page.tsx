@@ -147,7 +147,7 @@ export default function Home() {
     { label: "Ao vivo agora", valor: String(apostasOrdenadas.filter((b) => b.status === "ao_vivo").length) },
     { label: "Odd média", valor: oddMedia },
     { icon: <MinusIcon color="var(--muted)" />, label: "Void", valor: String(stats.void) },
-    { icon: <HourglassIcon color="var(--lime)" />, label: "Pendente", valor: String(stats.pendente) },
+    { icon: <HourglassIcon color="var(--lime)" spin />, label: "Pendente", valor: String(stats.pendente) },
     { label: "Taxa de acerto", valor: stats.taxaAcerto !== null ? `${stats.taxaAcerto.toFixed(1)}%` : "—" },
   ];
 

@@ -5,6 +5,13 @@
   border-radius: 16px;
   padding: 1.1rem 1.3rem;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.32);
+  transform: translateY(-1px);
 }
 
 /* Quando o editor está aberto embaixo, o card perde o arredondado/borda
@@ -13,6 +20,10 @@
 .cardComEditor {
   border-bottom: none;
   border-radius: 16px 16px 0 0;
+}
+
+.cardComEditor:hover {
+  transform: none;
 }
 
 .comPlacarAoVivo {
@@ -129,6 +140,7 @@
   font-weight: 600;
   font-size: 0.75rem;
   white-space: nowrap;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 .statusAgendada {
@@ -184,14 +196,20 @@
   justify-content: center;
   background: transparent;
   border: none;
+  border-radius: 6px;
   color: var(--muted);
   opacity: 0.75;
-  transition: opacity 0.1s ease, color 0.1s ease;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 
 .editButton:hover {
   opacity: 1;
   color: var(--lime);
+  background-color: rgba(215, 242, 77, 0.1);
+}
+
+.editButton:active {
+  transform: scale(0.92);
 }
 
 .bookmakerRow {
@@ -209,7 +227,7 @@
   padding: 0.6rem 0.5rem;
   text-decoration: none !important;
   filter: brightness(1);
-  transition: filter 0.15s ease;
+  transition: filter 0.15s ease, transform 0.15s ease;
   min-width: 0;
   height: 2.7rem;
   box-sizing: border-box;
@@ -217,6 +235,12 @@
 
 .bookmakerBtn:hover {
   filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+.bookmakerBtn:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
 }
 
 .bookmakerLogoImg {
@@ -238,7 +262,7 @@
   color: #fff;
   font-family: "Archivo", sans-serif;
   font-weight: 800;
-  font-size: 1.05rem;
+  font-size: 1.3rem;
   letter-spacing: -0.01em;
 }
 
