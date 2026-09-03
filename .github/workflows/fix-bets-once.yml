@@ -1,0 +1,42 @@
+name: Fix bets once (temporary)
+
+# Rodado manualmente uma única vez pra corrigir #67/#69 (ver
+# scripts/fix_bets_once.py). Apagar este workflow e o script depois de usar.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Forçar IPv4 (evita IPv6 sem rota no runner do GitHub Actions)
+        run: sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: playwright install --with-deps chromium
+
+      - name: Run fix script
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BOOKMAKERS: ${{ vars.BOOKMAKERS }}
+          SUPERBET_BASE_URL: ${{ vars.SUPERBET_BASE_URL }}
+          BETANO_BASE_URL: ${{ vars.BETANO_BASE_URL }}
+          BETANO_TENNIS_PATH: ${{ vars.BETANO_TENNIS_PATH }}
+          BET365_BASE_URL: ${{ vars.BET365_BASE_URL }}
+          BET365_TENNIS_PATH: ${{ vars.BET365_TENNIS_PATH }}
+          PLAYWRIGHT_HEADLESS: "true"
+          TIMEZONE: ${{ vars.TIMEZONE }}
+        run: python scripts/fix_bets_once.py
