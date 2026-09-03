@@ -27,7 +27,7 @@ from typing import Optional
 from bookmakers import REGISTRY
 from config import settings
 from models import Esporte, MatchInfo
-from nameutils import names_match, search_variants
+from nameutils import names_match, pair_matches, search_variants
 from sofascore_client import find_canonical_match, find_canonical_match_by_name
 
 logger = logging.getLogger(__name__)
@@ -233,6 +233,33 @@ def find_match(
 
     if jogador2:
         canonico = find_canonical_match(jogador1, jogador2, esporte=esporte, dias_de_busca=dias_de_busca, referencia=referencia)
+
+        # Fallback quando a varredura do dia falha. Ela depende do endpoint
+        # /scheduled-tournaments, que é o primeiro a ser bloqueado quando o
+        # SofaScore devolve 403 pro IP do runner do GitHub Actions — e aí a
+        # aposta ficava "não encontrada" mesmo com os DOIS nomes corretos
+        # em mãos (bug real, 03/09/2026: Qinwen Zheng x Yulia Putintseva,
+        # 15 tentativas 403 seguidas; o mesmo confronto resolve na hora
+        # fora do runner).
+        #
+        # A busca por nome usa /search/all + /team/{id}/featured-event, uma
+        # rota diferente, então costuma passar quando a outra não passa. Só
+        # aceita o resultado se o confronto devolvido bater com os dois
+        # nomes que já tínhamos — sem isso, um homônimo entraria no lugar.
+        if canonico is None:
+            for nome in (jogador1, jogador2):
+                candidato = find_canonical_match_by_name(nome, esporte=esporte, referencia=referencia)
+                if candidato and pair_matches(
+                    jogador1, jogador2,
+                    candidato.jogador1_oficial, candidato.jogador2_oficial,
+                    settings.SUPERBET_FUZZY_THRESHOLD,
+                ):
+                    logger.info(
+                        "SofaScore: confronto resolvido pela busca por nome (%r) — "
+                        "a varredura do dia falhou.", nome,
+                    )
+                    canonico = candidato
+                    break
     else:
         # Só o favorito citado: aqui o SofaScore precisa adivinhar o
         # adversário, e é exatamente onde ele erra (nome com typo, jogador

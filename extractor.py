@@ -111,8 +111,24 @@ exato:
   // partida" (basquete) etc — extraia o mercado como ele aparece no
   // print/legenda, não se limite aos exemplos acima.
   // Se só o nome do jogador/time + a odd forem citados, sem mercado
-  // explícito (ex: "Hurkacz odd: 2.85"), assuma "Vencedor da partida" (é o
-  // mercado implícito mais comum nesse caso).
+  // explícito (ex: "Hurkacz odd: 2.85"), assuma que a aposta é nesse
+  // jogador vencer — e ESCREVA O NOME DELE no mercado:
+  // "Hurkacz vencer a partida", NÃO apenas "Vencedor da partida".
+  //
+  // Isso vale principalmente quando o print mostra os DOIS jogadores (card
+  // de jogo ao vivo, com odds dos dois lados) e a legenda cita só um: o
+  // mercado é sobre O JOGADOR CITADO NA LEGENDA, mesmo que ele apareça em
+  // segundo no card. Um mercado só "Vencedor da partida" não diz de quem é
+  // a aposta e é inútil pra conferir o resultado depois.
+  //
+  // A legenda manda no nome, mas o print manda na grafia: o tipster
+  // escreve de memória e erra (ex: legenda "Putinseva", print
+  // "Yulia Putintseva" — é a mesma pessoa). Use a grafia do print em
+  // jogador1/jogador2 e no mercado.
+  //
+  // A ODD também identifica o lado: num card com "1  1.33" e "2  3.30", a
+  // odd 3.30 da legenda é a do jogador da coluna 2. Use isso pra confirmar
+  // em qual dos dois a aposta foi feita.
   "mercado": "mercado da aposta (ou null só se genuinamente não der pra inferir)",
 
   // Preencha isto SE tipo_aposta == "multipla" (senão deixe null/[]):
@@ -540,6 +556,33 @@ def _infer_market_from_favorite(texto: str, jogador1: Optional[str], jogador2: O
     return None
 
 
+def qual_jogador_o_tipster_citou(
+    texto: str, jogador1: Optional[str], jogador2: Optional[str]
+) -> Optional[str]:
+    """Dos dois jogadores do confronto, qual o tipster nomeou na legenda?
+
+    Serve pro caso em que o print traz os DOIS jogadores (card de jogo ao
+    vivo, por exemplo) e a legenda diz em qual deles a aposta foi feita.
+    Sem isso o mercado saía genérico ("Vencedor da partida") ou, pior,
+    com o jogador errado — bug real (03/09/2026): a tip
+    "Ao vivo! Putinseva odd: 3.30" virou "Qinwen Zheng vencer a partida",
+    a adversária, porque na falta de um dono explícito o código pegava o
+    primeiro nome do card.
+
+    Usa fuzzy (names_match) de propósito: o tipster escreve o nome de
+    memória e erra com frequência — aqui "Putinseva" sem o segundo "t"
+    contra "Yulia Putintseva". Exige um vencedor ÚNICO: se o nome citado
+    casa com os dois lados, é ambíguo e devolve None em vez de chutar.
+    """
+    if not jogador1 or not jogador2:
+        return None
+    citado = find_favorite_only(texto)
+    if not citado:
+        return None
+    casam = [j for j in (jogador1, jogador2) if names_match(citado, j, threshold=80)]
+    return casam[0] if len(casam) == 1 else None
+
+
 def parse_free_text(texto: str) -> ExtractedBet:
     """
     Heurística baseada em regex. Não é infalível — ajuste os padrões acima
@@ -630,6 +673,14 @@ def parse_free_text(texto: str) -> ExtractedBet:
 
     if mercado is None:
         mercado = _infer_market_from_favorite(texto, jogador1, jogador2)
+
+    # Dois jogadores no print E a legenda dizendo em qual deles é a aposta
+    # (ex: print do card ao vivo + "Ao vivo! Putinseva odd: 3.30"). Sem
+    # este ramo o mercado virava genérico ou nomeava a adversária.
+    if mercado is None and jogador1 and jogador2:
+        citado = qual_jogador_o_tipster_citou(texto_sem_mercado, jogador1, jogador2)
+        if citado:
+            mercado = f"{citado} vencer a partida"
 
     # Só o favorito citado, sem mercado explícito nem adversário — ex:
     # "Hurkacz odd: 2.85". Assume o mercado implícito mais comum: esse
