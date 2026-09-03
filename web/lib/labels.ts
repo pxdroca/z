@@ -6,7 +6,11 @@
 import type { BetStatus, ResultadoAposta } from "./types";
 
 export const STATUS_LABEL: Record<BetStatus, string> = {
-  agendada: "Agendada",
+  // "Pendente", não "Agendada": decisão explícita do usuário, a mesma que
+  // define o agrupamento em agrupamento.ts ("agendada = pendente, prefiro
+  // pendente"). O status no banco continua 'agendada' — só o rótulo na
+  // tela muda, pra não haver duas palavras pra mesma coisa no painel.
+  agendada: "Pendente",
   ao_vivo: "Ao vivo",
   nao_encontrada: "Não encontrada",
   erro_extracao: "Erro na extração",

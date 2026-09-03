@@ -389,6 +389,21 @@ def find_canonical_match_by_name(
                     diferenca / 86400, _JANELA_MAX_POR_NOME,
                 )
                 continue
+            # Descarta jogo de DUPLAS. O tipster aposta em simples, e o
+            # featured-event de um tenista pode perfeitamente ser a dupla
+            # dele — foi o que aconteceu com a tip "de la torre" em
+            # 03/09/2026: rejeitado o jogo de amanhã (certo), a busca por
+            # nome trouxe "Ingildsen/Poulsen x Friend/Montes-de la Torre"
+            # em vez do simples de hoje contra Daniel Rincon.
+            #
+            # O SofaScore nomeia duplas com "/" separando os parceiros,
+            # igual à Superbet (ver matcher._escolher_confronto).
+            if "/" in candidato.jogador1_oficial or "/" in candidato.jogador2_oficial:
+                logger.info(
+                    "SofaScore: descartando %s x %s para '%s' — é jogo de duplas.",
+                    candidato.jogador1_oficial, candidato.jogador2_oficial, jogador,
+                )
+                continue
             if menor_diferenca is None or diferenca < menor_diferenca:
                 menor_diferenca = diferenca
                 melhor = candidato

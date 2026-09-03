@@ -33,26 +33,36 @@ from sofascore_client import find_canonical_match, find_canonical_match_by_name
 logger = logging.getLogger(__name__)
 
 
-def buscar_confronto_na_superbet(nome: str, esporte: str = Esporte.TENIS.value) -> Optional[tuple[str, str]]:
+def buscar_confronto_na_superbet(
+    nome: str,
+    esporte: str = Esporte.TENIS.value,
+    odd_tip: Optional[float] = None,
+) -> Optional[tuple[str, str, bool]]:
     """Procura o confronto de `nome` na busca da Superbet, tentando o nome
-    inteiro e depois só o sobrenome/primeiro nome (ver
-    nameutils.search_variants). Devolve (jogador1, jogador2) do confronto
-    único encontrado, ou None.
+    inteiro e depois só o sobrenome (ver nameutils.search_variants).
+    Devolve (jogador1, jogador2, é_hoje) do confronto escolhido, ou None.
 
-    Serve de segunda opinião para o SofaScore em find_match. A Superbet é
-    boa nesse papel por um motivo específico: ela só lista jogos abertos
-    pra aposta, isto é, futuros. Isso descarta de graça as duas formas de
-    erro que o SofaScore comete sozinho (03/09/2026):
+    O terceiro item diz se o card da Superbet marcava o jogo como sendo de
+    HOJE. Importa porque a Superbet lista só jogos abertos pra aposta: se o
+    jogo de hoje do jogador já terminou, ela oferece o de amanhã, e aceitar
+    isso grava a aposta no confronto errado. Bug real (03/09/2026): a tip
+    "de la torre odd 2.00" era Daniel Rincon x Montes-de la Torre (11:55,
+    já encerrado), mas foi gravada como o jogo de 04/09 contra Jack
+    Pinnington Jones — o painel mostrava "agendada" para uma aposta que já
+    tinha resultado.
 
-      - "Alexandra muller" (o tipster quis dizer Alexandre Muller): o
-        SofaScore casou com uma dupla feminina de JUNHO DE 2021.
-      - "Hara friend": o jogador tem dois perfis no SofaScore e o
-        featured-event do perfil desatualizado apontava pra um jogo de
-        julho/2026.
+    `odd_tip` (a odd que o tipster mandou) desempata quando o jogador tem
+    simples e duplas no mesmo dia: as odds divergem bastante entre os dois
+    (ideia do usuário, confirmada ao vivo — Bucsa simples 1.51/2.55 vs
+    duplas 2.82/1.43, tip de 1.58). É mais robusto que só preferir simples,
+    porque funciona também se algum dia vier uma tip de duplas.
 
-    Se houver mais de um confronto plausível, devolve None em vez de
-    escolher: ambiguidade aqui é justamente o sinal de que não dá pra
-    confiar, e um palpite errado é pior que um "não encontrado".
+    Serve de segunda opinião para o SofaScore em find_match, que sozinho
+    erra assim (também 03/09/2026):
+      - "Alexandra muller" (o tipster quis dizer Alexandre Muller): casou
+        com uma dupla feminina de JUNHO DE 2021.
+      - "Hara friend": o jogador tem dois perfis e o featured-event do
+        desatualizado apontava pra um jogo de julho/2026.
     """
     adapter_cls = REGISTRY.get("superbet")
     if adapter_cls is None:
@@ -90,60 +100,102 @@ def buscar_confronto_na_superbet(nome: str, esporte: str = Esporte.TENIS.value) 
                 return False
             return names_match(sobrenome, lado, threshold)
 
-        plausiveis = [
-            (j1, j2) for j1, j2, _ in confrontos
-            if _lado_confere(j1) or _lado_confere(j2)
-        ]
+        plausiveis = [c for c in confrontos if _lado_confere(c.jogador1) or _lado_confere(c.jogador2)]
+        if not plausiveis:
+            continue
 
-        # Descarta jogos de DUPLAS antes de decidir. O tipster aposta em
-        # simples, e um tenista costuma ter simples e duplas no mesmo dia —
-        # então "2 plausíveis" quase sempre é "o jogo certo + a dupla dele",
-        # não uma ambiguidade real.
-        #
-        # Bug real (03/09/2026): quase todas as tips do dia caíram em
-        # "não encontrada" por isso. "Bucsa" trazia
-        # "Cristina Bucsa x Himeno Sakatsume" (o jogo certo) junto de
-        # "V.Golubic/S.Waltert x C.Bucsa/N.Melichar-Martinez" (duplas), o
-        # código via 2 e desistia. Mesma coisa com "Buse". Nomes sem duplas
-        # no dia (Popyrin, Khachanov, Svrcina, Michael Zheng) passavam —
-        # daí a falha parecer intermitente.
-        #
-        # A Superbet escreve duplas como "A.Sobrenome/B.Sobrenome", então a
-        # barra é o sinal, e é bem mais confiável que contar palavras.
-        simples = [(j1, j2) for j1, j2 in plausiveis if "/" not in j1 and "/" not in j2]
-        if len(simples) == 1:
-            j1, j2 = simples[0]
-            if len(plausiveis) > 1:
+        escolhido = _escolher_confronto(plausiveis, variante, odd_tip)
+        if escolhido is None:
+            return None
+
+        eh_hoje = _card_eh_hoje(escolhido.horario_texto)
+        logger.info(
+            "Superbet confirmou (busca por %r): %s x %s | card=%r odds=%s",
+            variante, escolhido.jogador1, escolhido.jogador2,
+            escolhido.horario_texto, escolhido.odds or "-",
+        )
+        return escolhido.jogador1, escolhido.jogador2, eh_hoje
+
+    return None
+
+
+def _card_eh_hoje(horario_texto: str) -> bool:
+    """O card da Superbet marca este jogo como sendo de hoje?
+
+    A Superbet rotula o card com "Hoje, HH:MM" / "Amanhã, HH:MM" (visto ao
+    vivo em 03/09/2026). Um card ao vivo pode vir só com o placar/minuto,
+    sem rótulo de dia — nesse caso também é hoje.
+    """
+    t = (horario_texto or "").strip().lower()
+    if not t:
+        return False
+    if "amanh" in t:
+        return False
+    return True
+
+
+def _escolher_confronto(plausiveis: list, variante: str, odd_tip: Optional[float]):
+    """Escolhe um confronto entre os candidatos da busca da Superbet.
+
+    Um tenista costuma ter simples E duplas no mesmo dia, então vários
+    candidatos quase nunca é ambiguidade real — é o jogo certo mais a dupla
+    dele. Dois desempates, na ordem:
+
+      1. A odd da tip. As odds divergem bastante entre simples e duplas
+         (ideia do usuário, confirmada ao vivo: Bucsa simples 1.51/2.55 vs
+         duplas 2.82/1.43, tip de 1.58). Escolhe o card cuja odd mais
+         próxima da tip é a mais próxima de todas. Funciona nos dois
+         sentidos — inclusive se algum dia vier uma tip de duplas, que hoje
+         nunca veio.
+      2. Sem odd (ou sem odds no card): prefere o jogo de simples, que é o
+         que o tipster aposta. A Superbet escreve duplas como
+         "A.Sobrenome/B.Sobrenome", então a barra é o sinal.
+
+    Devolve None quando nem isso resolve — chutar gravaria a aposta no
+    confronto errado, que é pior que "não encontrada".
+    """
+    if len(plausiveis) == 1:
+        return plausiveis[0]
+
+    if odd_tip is not None:
+        com_odds = [c for c in plausiveis if c.odds]
+        if com_odds:
+            def _distancia(c) -> float:
+                return min(abs(o - odd_tip) for o in c.odds)
+
+            ranked = sorted(com_odds, key=_distancia)
+            melhor, dist = ranked[0], _distancia(ranked[0])
+            # Só aceita se a odd realmente bate de perto. 0.35 absorve a
+            # variação normal entre casas (a tip vem de outra casa que não
+            # a Superbet) sem deixar passar um jogo cuja odd é claramente
+            # de outro confronto.
+            if dist <= 0.35 and (len(ranked) == 1 or _distancia(ranked[1]) > dist):
                 logger.info(
-                    "Superbet: %d confrontos para %r, %d de simples — usando o de simples.",
-                    len(plausiveis), variante, len(simples),
+                    "Superbet: %d confrontos para %r — escolhi por odd (tip=%.2f, card=%s, dif=%.2f).",
+                    len(plausiveis), variante, odd_tip, melhor.odds, dist,
                 )
-            logger.info(
-                "Superbet confirmou (busca por %r): %s x %s", variante, j1, j2,
-            )
-            return j1, j2
+                return melhor
 
-        if len(simples) > 1:
-            # Ambiguidade de verdade: dois jogos de simples batendo com o
-            # mesmo nome (homônimos). Aqui desistir é o certo — chutar
-            # gravaria a aposta no confronto errado.
-            logger.info(
-                "Superbet: %d jogos de simples plausíveis para %r (%s) — ambíguo, não vou escolher.",
-                len(simples), variante,
-                "; ".join(f"{a} x {b}" for a, b in simples[:4]),
-            )
-            return None
+    simples = [c for c in plausiveis if "/" not in c.jogador1 and "/" not in c.jogador2]
+    if len(simples) == 1:
+        logger.info(
+            "Superbet: %d confrontos para %r, 1 de simples — usando o de simples.",
+            len(plausiveis), variante,
+        )
+        return simples[0]
 
-        if plausiveis:
-            # Só sobrou duplas. Não serve pra confirmar uma aposta de
-            # simples, e passar isso adiante gravaria o confronto errado
-            # (foi assim que "Hara friend" pegou uma dupla antes).
-            logger.info(
-                "Superbet: só achei jogos de duplas para %r (%s) — ignorando.",
-                variante, "; ".join(f"{a} x {b}" for a, b in plausiveis[:4]),
-            )
-            return None
+    if len(simples) > 1:
+        logger.info(
+            "Superbet: %d jogos de simples plausíveis para %r (%s) — ambíguo, não vou escolher.",
+            len(simples), variante,
+            "; ".join(f"{c.jogador1} x {c.jogador2}" for c in simples[:4]),
+        )
+        return None
 
+    logger.info(
+        "Superbet: só achei jogos de duplas para %r (%s) — ignorando.",
+        variante, "; ".join(f"{c.jogador1} x {c.jogador2}" for c in plausiveis[:4]),
+    )
     return None
 
 
@@ -164,12 +216,17 @@ def find_match(
     esporte: str = Esporte.TENIS.value,
     dias_de_busca: int = 3,
     referencia: Optional[datetime] = None,
+    odd_tip: Optional[float] = None,
 ) -> MatchInfo:
     """
     Ponto de entrada principal, chamado pelo listener.py depois do
     extractor. `jogador2` pode ser None — caso do tipster ter citado só o
     favorito (ver extractor.find_favorite_only); nesse caso o adversário é
     resolvido consultando o SofaScore só pelo jogador1.
+
+    `odd_tip` é a odd que o tipster mandou; quando informada, desempata
+    entre o jogo de simples e o de duplas do mesmo jogador na Superbet (ver
+    buscar_confronto_na_superbet).
     """
     if not jogador1:
         return MatchInfo(encontrado=False, esporte=esporte)
@@ -184,16 +241,29 @@ def find_match(
         # resolve typo e perfil velho de uma vez; com o par em mãos, a
         # busca no SofaScore deixa de ser adivinhação e passa a ser
         # confirmação de um confronto específico.
-        par_superbet = buscar_confronto_na_superbet(jogador1, esporte)
+        par_superbet = buscar_confronto_na_superbet(jogador1, esporte, odd_tip)
         canonico = None
         if par_superbet:
-            s1, s2 = par_superbet
-            canonico = find_canonical_match(s1, s2, esporte=esporte, dias_de_busca=dias_de_busca, referencia=referencia)
-            if canonico is None:
+            s1, s2, eh_hoje = par_superbet
+            if not eh_hoje:
+                # A Superbet só lista jogo aberto pra aposta: se o card não
+                # é de hoje, o jogo de hoje deste jogador já acabou e o que
+                # sobrou na busca é o de amanhã. Confirmar por ele grava a
+                # aposta no confronto errado — bug real com "de la torre"
+                # (ver docstring de buscar_confronto_na_superbet). Deixa o
+                # SofaScore resolver, que enxerga jogo já encerrado.
                 logger.info(
-                    "Superbet achou %s x %s, mas o SofaScore não confirmou — "
-                    "seguindo para a busca só por nome.", s1, s2,
+                    "Superbet achou %s x %s, mas o card não é de hoje — "
+                    "provavelmente o jogo de hoje já encerrou; usando o SofaScore.",
+                    s1, s2,
                 )
+            else:
+                canonico = find_canonical_match(s1, s2, esporte=esporte, dias_de_busca=dias_de_busca, referencia=referencia)
+                if canonico is None:
+                    logger.info(
+                        "Superbet achou %s x %s, mas o SofaScore não confirmou — "
+                        "seguindo para a busca só por nome.", s1, s2,
+                    )
         if canonico is None:
             canonico = find_canonical_match_by_name(jogador1, esporte=esporte, referencia=referencia)
 

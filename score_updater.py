@@ -210,7 +210,7 @@ def _retentar_bet_nao_encontrada(bet: Bet) -> None:
     `if jogador2:` em matcher.find_match não detectava o placeholder e
     nunca reencaminhava pra find_canonical_match_by_name)."""
     jogador2 = bet.jogador2 if bet.jogador2 != "?" else None
-    match = find_match(bet.jogador1, jogador2, bet.esporte)
+    match = find_match(bet.jogador1, jogador2, bet.esporte, odd_tip=bet.odd)
     if not match.encontrado:
         logger.debug("Aposta #%s: ainda não encontrada (%s x %s)", bet.id, bet.jogador1, bet.jogador2)
         return

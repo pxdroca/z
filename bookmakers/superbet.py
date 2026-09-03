@@ -92,10 +92,54 @@ class _RawMatch:
     jogador2: str
     horario_texto: str
     link: str
+    # Odds do mercado "Vencedor da Partida" (1 e 2), quando o card as mostra.
+    # Usadas por matcher.buscar_confronto_na_superbet pra desempatar entre o
+    # jogo de simples e o de duplas do mesmo jogador — ver o porquê lá.
+    odds: tuple[float, ...] = ()
 
 
 def _day_param(offset: int) -> Optional[str]:
     return _DAY_KEYWORDS.get(offset)
+
+
+# Odd no card da busca: um decimal com 1-3 casas, entre 1.01 e 999.
+# Deliberadamente NÃO casa inteiros ("1"/"2" são os rótulos das colunas
+# casa/fora, não odds) nem horários ("16:00", separador diferente).
+_ODD_PATTERN = re.compile(r"\b(\d{1,3}[.,]\d{1,3})\b")
+
+
+def _odds_do_card(card) -> tuple[float, ...]:
+    """Odds do mercado "Vencedor da Partida" visíveis no card da busca.
+
+    Lido do texto dos botões de aposta em vez de um seletor de classe:
+    inspecionando o DOM ao vivo (03/09/2026), as classes com "odd" no nome
+    envolvem o bloco inteiro do mercado (o mesmo texto repetido em 21
+    elementos aninhados), enquanto cada botão contém exatamente um par
+    rótulo+odd ("1/1.51", "2/2.55"). O botão é o nível certo de
+    granularidade.
+
+    Devolve tupla vazia quando o card não mostra odds (mercado suspenso,
+    jogo ao vivo, layout diferente) — quem chama trata isso como "não sei",
+    nunca como "odd zero".
+    """
+    odds: list[float] = []
+    try:
+        botoes = card.query_selector_all("button")
+    except Exception:
+        return ()
+    for b in botoes:
+        try:
+            texto = b.inner_text()
+        except Exception:
+            continue
+        for bruto in _ODD_PATTERN.findall(texto or ""):
+            try:
+                valor = float(bruto.replace(",", "."))
+            except ValueError:
+                continue
+            if 1.01 <= valor <= 999:
+                odds.append(valor)
+    return tuple(odds)
 
 
 def _offset_days(data_hora: Optional[datetime]) -> int:
@@ -237,12 +281,19 @@ class SuperbetAdapter(BookmakerAdapter):
                 continue
             horario_el = card.query_selector(_SELECTORS["match_time"])
             horario_texto = horario_el.inner_text().strip() if horario_el else ""
-            matches.append(_RawMatch(jogador1=jogador1, jogador2=jogador2, horario_texto=horario_texto, link=urljoin(url, href)))
+            matches.append(_RawMatch(
+                jogador1=jogador1, jogador2=jogador2, horario_texto=horario_texto,
+                link=urljoin(url, href), odds=_odds_do_card(card),
+            ))
         return matches
 
-    def buscar_confrontos(self, termo: str, esporte: str = Esporte.TENIS.value) -> list[tuple[str, str, str]]:
+    def buscar_confrontos(self, termo: str, esporte: str = Esporte.TENIS.value) -> list[_RawMatch]:
         """Confrontos que a busca da Superbet devolve para `termo`, no
-        esporte pedido, como (jogador1, jogador2, link).
+        esporte pedido.
+
+        Devolve os _RawMatch inteiros (nomes, horário do card, odds, link) —
+        matcher.buscar_confronto_na_superbet usa o horário pra rejeitar um
+        jogo que não é de hoje e as odds pra desempatar simples vs. duplas.
 
         Existe para a validação cruzada em matcher.confirmar_confronto: a
         Superbet lista SÓ jogos futuros/abertos pra aposta, então servir de
@@ -253,7 +304,7 @@ class SuperbetAdapter(BookmakerAdapter):
         if not termo:
             return []
         def _buscar(page):
-            return [(c.jogador1, c.jogador2, c.link) for c in self._search(page, termo, esporte)]
+            return self._search(page, termo, esporte)
         return self._run_with_browser(_buscar) or []
 
     def find_exact_link(self, jogador1, jogador2, torneio, data_hora, esporte: str = Esporte.TENIS.value):

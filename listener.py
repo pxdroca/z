@@ -53,6 +53,7 @@ import asyncio
 import logging
 import sys
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 
 # O console do Windows normalmente usa uma codepage legada (cp1252) que não
@@ -335,7 +336,16 @@ async def process_message(message: Message) -> None:
     # find_match roda Playwright em modo síncrono (sofascore_client.py e
     # bookmakers/*.py) — incompatível com o loop asyncio deste listener, por
     # isso despachamos para uma thread separada.
-    match: MatchInfo = await asyncio.to_thread(find_match, extracted.jogador1, extracted.jogador2, extracted.esporte)
+    # A odd extraída vai junto: quando o tipster cita só o favorito, ela
+    # desempata entre o jogo de simples e o de duplas do mesmo jogador na
+    # Superbet (ver matcher.buscar_confronto_na_superbet).
+    match: MatchInfo = await asyncio.to_thread(
+        partial(
+            find_match,
+            extracted.jogador1, extracted.jogador2, extracted.esporte,
+            odd_tip=extracted.odd,
+        )
+    )
 
     status = BetStatus.AGENDADA.value if match.encontrado else BetStatus.NAO_ENCONTRADA.value
 

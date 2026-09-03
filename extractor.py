@@ -355,12 +355,32 @@ _BASQUETE_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
+# Total de PONTOS com linha alta = basquete. Em tênis a linha de
+# "mais/menos de" é de GAMES e fica na casa das unidades ("games mais de
+# 8.5", ver _GEMINI_PROMPT); no basquete é de pontos e fica perto de 200.
+# 40 separa os dois com folga enorme — nenhum jogo de tênis chega perto, e
+# nenhum total de basquete fica abaixo.
+#
+# Bug real (03/09/2026): a tip "AO VIVO! mais de 198.5 pontos odd: 1.95"
+# não tinha nenhuma das palavras-chave acima, foi classificada como tênis,
+# e o parser de favorito pegou a palavra "pontos" como nome do jogador
+# (aposta #64 gravada como "pontos x ?", nao_encontrada).
+_BASQUETE_TOTAL_PONTOS = re.compile(r"(\d{2,3}(?:[.,]\d+)?)\s*pontos", re.IGNORECASE)
+
 
 def _detectar_esporte(texto: str) -> str:
-    """Best-effort: basquete se o texto citar liga/terminologia de basquete,
-    senão tênis (default — preserva o comportamento atual do parser)."""
-    if _BASQUETE_KEYWORDS.search(texto or ""):
+    """Best-effort: basquete se o texto citar liga/terminologia de basquete
+    ou um total de pontos alto, senão tênis (default — preserva o
+    comportamento atual do parser)."""
+    texto = texto or ""
+    if _BASQUETE_KEYWORDS.search(texto):
         return Esporte.BASQUETE.value
+    for bruto in _BASQUETE_TOTAL_PONTOS.findall(texto):
+        try:
+            if float(bruto.replace(",", ".")) >= 40:
+                return Esporte.BASQUETE.value
+        except ValueError:
+            continue
     return Esporte.TENIS.value
 
 # Tipsters costumam escrever só o nome do favorito antes da odd, sem citar o
@@ -425,6 +445,12 @@ _FAVORITO_IGNORE_WORDS = {
     # sonhar" viraram jogador1="Aquela"/"montei uma" (ambos comentários
     # sobre uma múltipla futura, não uma tip com nome de jogador nenhum).
     "aquela", "aquele", "essa", "esse", "isso", "uma", "um", "montei",
+    # Termos de MERCADO, não nomes de jogador. "AO VIVO! mais de 198.5
+    # pontos odd: 1.95" (basquete, 03/09/2026) virou jogador1="pontos" e
+    # mercado="pontos vencer a partida" — a aposta era total de pontos, sem
+    # nome de jogador nenhum no texto.
+    "pontos", "games", "sets", "mais", "menos", "acima", "abaixo",
+    "total", "handicap", "over", "under",
 }
 
 
