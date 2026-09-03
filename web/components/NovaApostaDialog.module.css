@@ -1,0 +1,234 @@
+/* Botão no header — mesmo formato/peso do botão de atualizar ao lado,
+   pra ler como ação irmã e não como ação primária da tela. */
+.trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: background-color 0.18s var(--ease), border-color 0.18s var(--ease), color 0.18s var(--ease);
+}
+
+.trigger:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
+  color: var(--text);
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  /* Escurece bem o fundo: o diálogo é modal, precisa isolar do resto. */
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: overlay-in 0.16s var(--ease);
+  overflow-y: auto;
+}
+
+/* Superfície SÓLIDA, deliberadamente diferente dos cards. O vidro
+   translúcido serve pra card apoiado na página; num modal ele deixou os
+   cards de trás vazarem por cima dos campos e o formulário ficou
+   ilegível (visto em teste). Aqui a hierarquia pede opacidade. */
+.dialog {
+  position: relative;
+  width: 100%;
+  max-width: 30rem;
+  padding: 1.25rem;
+  background: var(--surface-solid);
+  border: 1px solid var(--border-strong);
+  border-top-color: var(--glass-top);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), var(--glass-inset);
+  animation: dialog-in 0.2s var(--ease);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.titulo {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.fechar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+
+.fechar:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.ajuda {
+  margin: 0.3rem 0 1rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.campoLargo {
+  grid-column: 1 / -1;
+}
+
+.label {
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.input {
+  width: 100%;
+  height: 2.2rem;
+  padding: 0 0.6rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.83rem;
+  transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+
+.input:hover {
+  border-color: var(--border-strong);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.erro {
+  margin-top: 0.85rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--red-soft);
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--red);
+}
+
+.acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+}
+
+.cancelar,
+.salvar {
+  height: 2.2rem;
+  padding: 0 0.95rem;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.83rem;
+  font-weight: 550;
+  transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease), opacity 0.15s var(--ease);
+}
+
+.cancelar {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.cancelar:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+/* Ação primária: o accent do produto, usado com parcimônia (é o único
+   botão preenchido da tela). */
+.salvar {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #14171a;
+  font-weight: 600;
+}
+
+.salvar:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, white);
+}
+
+.cancelar:disabled,
+.salvar:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .dialog {
+    padding: 1.05rem;
+  }
+}

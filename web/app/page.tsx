@@ -5,6 +5,7 @@ import { BetCard } from "@/components/BetCard";
 import { FilterPopover, type Filtro } from "@/components/FilterPopover";
 import { GerarImagemResumo } from "@/components/GerarImagemResumo";
 import { MetricsGrid, type MetricItem } from "@/components/MetricsGrid";
+import { NovaApostaDialog } from "@/components/NovaApostaDialog";
 import { SearchInput } from "@/components/SearchInput";
 import { StatusTabs, type FiltroGrupo } from "@/components/StatusTabs";
 import { LayersIcon, RefreshIcon, TargetIcon, TrendDownIcon, TrendUpIcon } from "@/components/icons";
@@ -230,6 +231,7 @@ export default function Home() {
               <RefreshIcon size={15} />
             </span>
           </button>
+          <NovaApostaDialog onCriada={() => buscarBets(filtro)} />
           <GerarImagemResumo bets={bets} />
           <FilterPopover filtro={filtro} onChange={setFiltro} />
         </div>

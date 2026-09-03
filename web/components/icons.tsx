@@ -40,6 +40,15 @@ export function MinusIcon({ color = "currentColor", size = 14 }: IconProps) {
   );
 }
 
+export function PlusIcon({ color = "currentColor", size = 14 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <path d="M5 12h14" />
+      <path d="M12 5v14" />
+    </svg>
+  );
+}
+
 export function HourglassIcon({ color = "currentColor", size = 14, spin = false }: IconProps & { spin?: boolean }) {
   return (
     <svg {...base(size)} stroke={color} className={spin ? "icon-spin" : undefined}>

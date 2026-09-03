@@ -101,7 +101,13 @@ export function BetCard({
 
   return (
     <div>
-      <div className={editando ? `${styles.card} ${styles.cardComEditor}` : styles.card}>
+      {/* data-resultado alimenta o glow ambiental do canto (ver
+          BetCard.module.css). Fica num atributo em vez de classe pra o
+          CSS resolver a cor sozinho — nenhuma lógica de cor no TSX. */}
+      <div
+        className={editando ? `${styles.card} ${styles.cardComEditor}` : styles.card}
+        data-resultado={bet.resultado}
+      >
         <div className={styles.topRow}>
           <span className={styles.statusInline} style={{ color: corResultado }}>
             <ResultadoIcon resultado={bet.resultado} />

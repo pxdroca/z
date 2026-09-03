@@ -118,6 +118,59 @@ export async function getBet(id: number): Promise<Bet | null> {
   return rows[0] ? rowToBet(rows[0]) : null;
 }
 
+/** Campos aceitos ao criar uma aposta manualmente pelo painel. */
+export interface NovaBetManual {
+  jogador1: string;
+  jogador2: string;
+  mercado: string | null;
+  odd: number | null;
+  unidades: number;
+  esporte: Bet["esporte"];
+  torneio: string | null;
+  data_hora: string | null;
+  status: BetStatus;
+  resultado: ResultadoAposta;
+}
+
+/**
+ * Insere uma aposta criada à mão no painel (rota POST /api/bets).
+ *
+ * Existe porque o pipeline automático não cobre todo jogo: o SofaScore só
+ * expõe os torneios que aparecem no endpoint de jogos do dia, e ligas fora
+ * dele (ex: NBL Blitz, a pré-temporada australiana de basquete — caso real
+ * de 03/09/2026) nunca são confirmadas, deixando a aposta presa em
+ * "nao_encontrada" sem nenhuma forma de corrigir pela interface. Antes
+ * disso, a única escrita possível pelo painel era editar o resultado.
+ *
+ * mensagem_id fica NULL de propósito: é a marca de "não veio do Telegram".
+ * A coluna é UNIQUE, mas o Postgres permite vários NULL num índice único,
+ * então várias apostas manuais coexistem sem conflito — e a idempotência
+ * do listener (que casa por mensagem_id) continua intacta.
+ */
+export async function insertBetManual(dados: NovaBetManual): Promise<Bet> {
+  const { rows } = await getPool().query<BetRow>(
+    `INSERT INTO bets (jogador1, jogador2, torneio, mercado, odd, data_hora,
+                       links_json, status, fonte_texto, mensagem_id,
+                       unidades, resultado, tipo_aposta, esporte)
+     VALUES ($1, $2, $3, $4, $5, $6, '{}', $7, $8, NULL, $9, $10, 'simples', $11)
+     RETURNING *`,
+    [
+      dados.jogador1,
+      dados.jogador2,
+      dados.torneio,
+      dados.mercado,
+      dados.odd,
+      dados.data_hora,
+      dados.status,
+      "Aposta lançada manualmente no painel.",
+      dados.unidades,
+      dados.resultado,
+      dados.esporte,
+    ]
+  );
+  return rowToBet(rows[0]);
+}
+
 /** Port de update_status() — usado pela rota PATCH /api/bets/:id. */
 export async function updateStatus(id: number, status: BetStatus): Promise<void> {
   await getPool().query("UPDATE bets SET status = $1 WHERE id = $2", [status, id]);

@@ -9,11 +9,14 @@
      Grafite/carvão, nunca preto puro: a diferença sutil entre o fundo
      da página e o dos cards é o que cria a profundidade sem precisar de
      borda forte ou sombra pesada. */
-  --bg: #0d0f11;
-  --bg-elevated: #111418;
+  /* Fundo um passo mais escuro que antes: o vidro dos cards ficou mais
+     opaco (ver --glass-bg), então o contraste card/fundo — que é o que
+     cria a profundidade — precisa vir daqui. */
+  --bg: #0b0d0f;
+  --bg-elevated: #101316;
   --surface: rgba(255, 255, 255, 0.028);
   --surface-hover: rgba(255, 255, 255, 0.045);
-  --surface-solid: #15181c;
+  --surface-solid: #14171a;
 
   /* Bordas quase imperceptíveis — presença por contraste mínimo, não
      por linha visível. */
@@ -51,6 +54,42 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.42);
+
+  /* --- Vidro (glassmorphism) ---------------------------------------
+     Um único conjunto de tokens para toda superfície de vidro (cards de
+     aposta, cards de métrica, popovers, diálogo). Antes cada componente
+     repetia --surface + --border + blur por conta própria e o efeito
+     ficava quase invisível: o fundo era transparente demais (0.028) pra
+     haver material sobre o qual o blur pudesse aparecer.
+
+     O valor alto (0.55-0.70 de opacidade sobre um grafite) é o que faz o
+     vidro existir: escuro o bastante pra não clarear o card, opaco o
+     bastante pra ler como superfície. */
+  --glass-bg: rgba(25, 29, 34, 0.62);
+  --glass-bg-hover: rgba(31, 36, 42, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 255, 255, 0.14);
+  /* Highlight do topo — a "quina iluminada" do vidro. */
+  --glass-top: rgba(255, 255, 255, 0.1);
+  --glass-blur: 18px;
+  --glass-saturate: 125%;
+  /* Sombra profunda e suave: eleva o card sem espalhar sujeira. */
+  --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.22);
+  --glass-shadow-hover: 0 18px 52px rgba(0, 0, 0, 0.4), 0 3px 10px rgba(0, 0, 0, 0.26);
+  /* Brilho de vidro interno (1px por dentro, no topo) — reforça a
+     sensação de espessura junto com --glass-top. */
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+
+  /* --- Glow ambiental de status ------------------------------------
+     Luz difusa "atrás do vidro" no canto do card, não barra lateral nem
+     card colorido. Só a cor mora aqui; a geometria (canto, raio) fica no
+     componente, pra um token servir a vários formatos. */
+  --green-glow: rgba(52, 211, 153, 0.26);
+  --red-glow: rgba(248, 113, 113, 0.26);
+  --amber-glow: rgba(251, 191, 36, 0.2);
+  --blue-glow: rgba(96, 165, 250, 0.2);
+  --purple-glow: rgba(167, 139, 250, 0.2);
+  --neutral-glow: rgba(156, 163, 175, 0.14);
 
   /* --- Forma / ritmo ------------------------------------------------ */
   --radius-sm: 8px;

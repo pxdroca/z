@@ -25,7 +25,14 @@ export function MetricsGrid({ itens }: { itens: MetricItem[] }) {
   return (
     <div className={styles.grid}>
       {itens.map((item) => (
-        <div key={item.label} className={styles.card}>
+        // --card-glow alimenta o glow do canto (ver MetricsGrid.module.css).
+        // Reaproveita colorSoft (a variante 12% da cor de acento), que já
+        // vem pronta — sem prop nova e sem cálculo de cor no componente.
+        <div
+          key={item.label}
+          className={styles.card}
+          style={item.colorSoft ? ({ "--card-glow": item.colorSoft } as React.CSSProperties) : undefined}
+        >
           <div className={styles.topo}>
             {item.icon ? (
               <div className={styles.iconeBox} style={{ background: item.colorSoft }}>
