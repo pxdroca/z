@@ -31,6 +31,7 @@ except ImportError:  # pacote não instalado — segue sem stealth (degradação
     stealth_sync = None
 
 from config import settings
+from models import Esporte
 
 logger = logging.getLogger(__name__)
 
@@ -109,12 +110,19 @@ class BookmakerAdapter:
     # Contrato que cada casa implementa
     # ------------------------------------------------------------------
 
-    def build_fallback_link(self, torneio: Optional[str], data_hora: Optional[datetime]) -> str:
+    def build_fallback_link(
+        self, torneio: Optional[str], data_hora: Optional[datetime], esporte: str = Esporte.TENIS.value
+    ) -> str:
         """Link aproximado (torneio/dia) — sempre deve funcionar, sem depender de scraping."""
         raise NotImplementedError
 
     def find_exact_link(
-        self, jogador1: str, jogador2: str, torneio: Optional[str], data_hora: Optional[datetime]
+        self,
+        jogador1: str,
+        jogador2: str,
+        torneio: Optional[str],
+        data_hora: Optional[datetime],
+        esporte: str = Esporte.TENIS.value,
     ) -> Optional[str]:
         """
         Tenta achar a URL exata da partida nesta casa. Pode devolver None
@@ -129,12 +137,17 @@ class BookmakerAdapter:
     # ------------------------------------------------------------------
 
     def get_link(
-        self, jogador1: str, jogador2: str, torneio: Optional[str], data_hora: Optional[datetime]
+        self,
+        jogador1: str,
+        jogador2: str,
+        torneio: Optional[str],
+        data_hora: Optional[datetime],
+        esporte: str = Esporte.TENIS.value,
     ) -> BookmakerLink:
-        fallback_url = self.build_fallback_link(torneio, data_hora)
+        fallback_url = self.build_fallback_link(torneio, data_hora, esporte)
 
         try:
-            exato = self.find_exact_link(jogador1, jogador2, torneio, data_hora)
+            exato = self.find_exact_link(jogador1, jogador2, torneio, data_hora, esporte)
         except Exception:
             logger.exception("%s: erro ao tentar link exato, usando fallback.", self.slug)
             exato = None

@@ -23,6 +23,9 @@ export type ResultadoAposta = (typeof RESULTADO_APOSTA_VALUES)[number];
 export const TIPO_APOSTA_VALUES = ["simples", "multipla"] as const;
 export type TipoAposta = (typeof TIPO_APOSTA_VALUES)[number];
 
+export const ESPORTE_VALUES = ["tenis", "basquete"] as const;
+export type Esporte = (typeof ESPORTE_VALUES)[number];
+
 export interface BookmakerLink {
   nome: string;
   url: string;
@@ -49,6 +52,7 @@ export interface Bet {
   resultado: ResultadoAposta;
   tipo_aposta: TipoAposta;
   selecoes: string[];
+  esporte: Esporte;
   // Computado no servidor (port de Bet.jogo em models.py) — nunca persistido.
   jogo: string;
 }

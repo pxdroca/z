@@ -53,6 +53,7 @@ from typing import Optional
 
 from playwright.sync_api import Page, sync_playwright
 
+from models import Esporte
 from nameutils import pair_matches
 from sofascore_client import EventStatus
 
@@ -60,13 +61,37 @@ logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://webws.365scores.com/web/games/allscores/"
 _SPORT_ID_TENIS = 3
+# Confirmado ao vivo em 03/09/2026 via GET https://webws.365scores.com/web/
+# sports/ (endpoint público de metadados do 365scores, devolve a lista
+# completa de esportes com id/name): {"id": 2, "name": "Basketball",
+# "nameForURL": "basketball"}. Validado batendo sports=2 contra o dia real —
+# devolveu jogos de clubes reais de basquete (Joventut de Badalona, Virtus
+# Bologna, Turk Telekom etc.), mesmo formato de campos que o tênis.
+_SPORT_ID_BASQUETE = 2
+
+_SPORT_IDS = {
+    Esporte.TENIS.value: _SPORT_ID_TENIS,
+    Esporte.BASQUETE.value: _SPORT_ID_BASQUETE,
+}
 
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
 )
 
-_SET_STAGE_PATTERN = re.compile(r"^(\d)º set$")
+# Nome do stage de tênis ("1º set"..) confirmado ao vivo (ver docstring do
+# módulo). "quarto"/"tempo" aceitos por analogia para basquete, mas na
+# prática o campo `stages` do 365scores vem sempre None/vazio para basquete
+# (confirmado ao vivo em 03/09/2026, ~109 jogos finalizados de vários dias,
+# nenhum com stages preenchido — o próprio objeto do jogo traz
+# "hasPointByPoint": false). Ou seja: para basquete, este fallback nunca
+# devolve placar por quarto (EventStatus.sets fica sempre []), só o placar
+# final e o vencedor (via homeCompetitor/awayCompetitor.score/isWinner) —
+# suficiente para conferir moneyline, mas NÃO para handicap/total de pontos
+# (ver resultado_checker._checar_resultado_basquete, que precisa de
+# evt.sets). Isso só afeta o fallback: o SofaScore (fonte primária) traz
+# period1..4 normalmente para basquete (ver sofascore_client.py).
+_SET_STAGE_PATTERN = re.compile(r"^(\d)º (?:set|quarto|tempo)$")
 
 # statusGroup do 365scores -> fase do jogo. Levantado sobre os 92 jogos de
 # tênis de 03/09/2026 (ver docstring do módulo).
@@ -98,11 +123,12 @@ def _run_with_browser(fn):
             browser.close()
 
 
-def _fetch_games(page: Page, dia: datetime) -> list[dict]:
+def _fetch_games(page: Page, dia: datetime, esporte: str = Esporte.TENIS.value) -> list[dict]:
     data_str = dia.strftime("%d/%m/%Y")
+    sport_id = _SPORT_IDS[esporte]
     url = (
         f"{_BASE_URL}?appTypeId=5&langId=31&timezoneName=America/Sao_Paulo"
-        f"&userCountryId=21&sports={_SPORT_ID_TENIS}&startDate={data_str}&endDate={data_str}"
+        f"&userCountryId=21&sports={sport_id}&startDate={data_str}&endDate={data_str}"
     )
     try:
         resp = page.goto(url, timeout=20_000)
@@ -185,6 +211,7 @@ def find_status_by_names(
     jogador1: str,
     jogador2: str,
     threshold: int,
+    esporte: str = Esporte.TENIS.value,
     dias_de_busca: int = 1,
     referencia: Optional[datetime] = None,
 ) -> Optional[EventStatus]:
@@ -203,7 +230,7 @@ def find_status_by_names(
     def _buscar(page: Page) -> Optional[EventStatus]:
         for offset in range(dias_de_busca + 1):
             dia = referencia + timedelta(days=offset)
-            for game in _fetch_games(page, dia):
+            for game in _fetch_games(page, dia, esporte):
                 home = (game.get("homeCompetitor") or {}).get("name", "")
                 away = (game.get("awayCompetitor") or {}).get("name", "")
                 if pair_matches(jogador1, jogador2, home, away, threshold):

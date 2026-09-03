@@ -1,11 +1,12 @@
 // Port de resultado_checker.py — mesma cobertura de mercados (vencedor da
-// partida, vencer o Nº set, vencer um set genérico, vencer sem perder set),
-// mesmos regex, mesma lógica de decisão. Ver o original para o porquê de
-// cada padrão e o que fica deliberadamente de fora (aces, games, dupla
-// falta, placar exato, tie-break).
+// partida, vencer o Nº set, vencer um set genérico, vencer sem perder set
+// para tênis; moneyline, handicap de pontos e total de pontos para
+// basquete), mesmos regex, mesma lógica de decisão. Ver o original para o
+// porquê de cada padrão e o que fica deliberadamente de fora (aces, games,
+// dupla falta, placar exato, tie-break, mercados de jogador individual).
 
 import { namesMatch } from "./nameutils";
-import type { Bet, ResultadoAposta } from "./types";
+import type { Bet, Esporte, ResultadoAposta } from "./types";
 
 const THRESHOLD_NOME = 80;
 
@@ -13,6 +14,11 @@ const PADRAO_PARTIDA = /^(.+?)\s+(?:vencer a partida|vencedor da partida|ganhar)
 const PADRAO_SET_ESPECIFICO = /^(.+?)\s+vencer o (\d)º set$/i;
 const PADRAO_SET_GENERICO = /^(.+?)\s+vencer um set$/i;
 const PADRAO_SEM_PERDER_SET = /^(.+?)\s+vencer sem perder set(?:s)?$/i;
+
+// Basquete: "Lakers -5.5" / "Handicap Celtics +3.5" / "Handicap: Lakers -5.5"
+const PADRAO_HANDICAP = /^(?:handicap\s*(?:de pontos)?\s*[:\-]?\s*)?(.+?)\s+([+-]\s?\d+(?:[.,]\d+)?)$/i;
+// Basquete: "Mais de 215.5 pontos" / "Menos de 210.5" / "Over 215.5" / "Under 210.5 pontos"
+const PADRAO_TOTAL_PONTOS = /^(mais|menos|over|under)\s+de\s+(\d+(?:[.,]\d+)?)\s*(?:pontos?)?$/i;
 
 type Lado = "jogador1" | "jogador2";
 
@@ -42,20 +48,43 @@ function checarResultado(
   mercado: string | null,
   jogador1: string | null,
   jogador2: string | null,
-  evt: EventStatusLike
+  evt: EventStatusLike,
+  esporte: Esporte = "tenis"
 ): ResultadoAposta | null {
   if (!mercado || evt.status !== "finished") return null;
   const m0 = mercado.trim();
 
-  let m = m0.match(PADRAO_PARTIDA);
-  if (m) {
-    const lado = nomeBate(m[1].trim(), jogador1, jogador2);
-    if (lado === null || evt.vencedor === null) return null;
-    const venceu = (lado === "jogador1" && evt.vencedor === "home") || (lado === "jogador2" && evt.vencedor === "away");
-    return venceu ? "green" : "red";
+  if (esporte === "basquete") return checarResultadoBasquete(m0, jogador1, jogador2, evt);
+  return checarResultadoTenis(m0, jogador1, jogador2, evt);
+}
+
+/** Vencedor da partida — mesmo texto de mercado e mesma lógica para tênis e
+ * basquete (compara com evt.vencedor, agnóstico de esporte). */
+function checarMoneyline(
+  mercado: string,
+  jogador1: string | null,
+  jogador2: string | null,
+  evt: EventStatusLike
+): ResultadoAposta | null {
+  const m = mercado.match(PADRAO_PARTIDA);
+  if (!m) return null;
+  const lado = nomeBate(m[1].trim(), jogador1, jogador2);
+  if (lado === null || evt.vencedor === null) return null;
+  const venceu = (lado === "jogador1" && evt.vencedor === "home") || (lado === "jogador2" && evt.vencedor === "away");
+  return venceu ? "green" : "red";
+}
+
+function checarResultadoTenis(
+  m0: string,
+  jogador1: string | null,
+  jogador2: string | null,
+  evt: EventStatusLike
+): ResultadoAposta | null {
+  if (PADRAO_PARTIDA.test(m0)) {
+    return checarMoneyline(m0, jogador1, jogador2, evt);
   }
 
-  m = m0.match(PADRAO_SET_ESPECIFICO);
+  let m = m0.match(PADRAO_SET_ESPECIFICO);
   if (m) {
     const lado = nomeBate(m[1].trim(), jogador1, jogador2);
     const indiceSet = Number(m[2]) - 1;
@@ -91,6 +120,52 @@ function checarResultado(
   return null;
 }
 
+/** Cobre moneyline, handicap de pontos por time e total de pontos
+ * (over/under). Mercados de jogador individual (pontos/rebotes/
+ * assistências) não são cobertos — evt.sets só tem placar por período, sem
+ * estatística de jogador — caem em null (pendente, conferência manual). */
+function checarResultadoBasquete(
+  m0: string,
+  jogador1: string | null,
+  jogador2: string | null,
+  evt: EventStatusLike
+): ResultadoAposta | null {
+  if (PADRAO_PARTIDA.test(m0)) {
+    return checarMoneyline(m0, jogador1, jogador2, evt);
+  }
+
+  if (evt.sets.length === 0) return null;
+
+  let m = m0.match(PADRAO_HANDICAP);
+  if (m) {
+    const lado = nomeBate(m[1].trim(), jogador1, jogador2);
+    if (lado === null) return null;
+    const linha = Number(m[2].replace(/\s/g, "").replace(",", "."));
+    if (Number.isNaN(linha)) return null;
+    const pontosJ1 = evt.sets.reduce((soma, [h]) => soma + h, 0);
+    const pontosJ2 = evt.sets.reduce((soma, [, a]) => soma + a, 0);
+    const [pontosLado, pontosAdversario] = lado === "jogador1" ? [pontosJ1, pontosJ2] : [pontosJ2, pontosJ1];
+    const margemAjustada = pontosLado - pontosAdversario + linha;
+    if (margemAjustada === 0) return "void"; // push: só acontece com handicap inteiro
+    return margemAjustada > 0 ? "green" : "red";
+  }
+
+  m = m0.match(PADRAO_TOTAL_PONTOS);
+  if (m) {
+    const direcao = m[1].trim().toLowerCase();
+    const linha = Number(m[2].replace(",", "."));
+    if (Number.isNaN(linha)) return null;
+    const total = evt.sets.reduce((soma, [h, a]) => soma + h + a, 0);
+    if (total === linha) return "void"; // push: só acontece com linha inteira
+    const acima = total > linha;
+    const querMais = direcao === "mais" || direcao === "over";
+    const venceu = querMais ? acima : !acima;
+    return venceu ? "green" : "red";
+  }
+
+  return null;
+}
+
 /**
  * Mesma interpretação de checarResultado(), mas a partir de uma Bet já
  * persistida (placar_final/vencedor_partida como string) — usado pela rota
@@ -107,5 +182,5 @@ export function checarResultadoDeBet(bet: Bet): ResultadoAposta | null {
     vencedor: vencedorLado === "jogador1" ? "home" : "away",
     sets,
   };
-  return checarResultado(bet.mercado, bet.jogador1, bet.jogador2, evt);
+  return checarResultado(bet.mercado, bet.jogador1, bet.jogador2, evt, bet.esporte ?? "tenis");
 }

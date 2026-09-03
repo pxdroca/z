@@ -79,7 +79,7 @@ from database import (
 )
 from extractor import detectar_aviso_cashout, extract_bet_info
 from matcher import build_enabled_adapters, find_match
-from models import Bet, BetStatus, ExtractedBet, MatchInfo, ResultadoAposta, TipoAposta
+from models import Bet, BetStatus, Esporte, ExtractedBet, MatchInfo, ResultadoAposta, TipoAposta
 from nameutils import names_match
 from notifier import send_bet_notification, send_plain_message
 
@@ -227,6 +227,7 @@ async def _processar_aviso_cashout(mensagem_id: int, nome_citado: str, caption: 
         fonte_texto=caption,
         mensagem_id=mensagem_id,
         unidades=1.0,
+        esporte=casadas[0].esporte if casadas else Esporte.TENIS.value,
     )
     insert_bet(bet_registro)
 
@@ -284,6 +285,7 @@ async def process_message(message: Message) -> None:
             fonte_texto=extracted.texto_bruto,
             mensagem_id=message.id,
             unidades=1.0,
+            esporte=extracted.esporte,
         )
         bet.id = insert_bet(bet)
         # Ainda salva no banco (auditoria/debug), mas só notifica no
@@ -323,6 +325,7 @@ async def process_message(message: Message) -> None:
             unidades=1.0,
             tipo_aposta=TipoAposta.MULTIPLA.value,
             selecoes=extracted.selecoes,
+            esporte=extracted.esporte,
         )
         bet.id = insert_bet(bet)
         await send_bet_notification(bet)
@@ -332,7 +335,7 @@ async def process_message(message: Message) -> None:
     # find_match roda Playwright em modo síncrono (sofascore_client.py e
     # bookmakers/*.py) — incompatível com o loop asyncio deste listener, por
     # isso despachamos para uma thread separada.
-    match: MatchInfo = await asyncio.to_thread(find_match, extracted.jogador1, extracted.jogador2)
+    match: MatchInfo = await asyncio.to_thread(find_match, extracted.jogador1, extracted.jogador2, extracted.esporte)
 
     status = BetStatus.AGENDADA.value if match.encontrado else BetStatus.NAO_ENCONTRADA.value
 
@@ -354,6 +357,7 @@ async def process_message(message: Message) -> None:
         mensagem_id=message.id,
         sofascore_event_id=match.sofascore_event_id,
         unidades=1.0,
+        esporte=extracted.esporte,
     )
 
     # --- database.py ---------------------------------------------------------

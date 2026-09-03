@@ -131,7 +131,7 @@ def _processar_bet(bet: Bet, evt: EventStatus) -> None:
     isto pra cada aposta daquele evento)."""
     if evt.status == "finished":
         vencedor = _vencedor_nome(bet, evt)
-        resultado = resultado_checker.checar_resultado(bet.mercado, bet.jogador1, bet.jogador2, evt)
+        resultado = resultado_checker.checar_resultado(bet.mercado, bet.jogador1, bet.jogador2, evt, esporte=bet.esporte)
         update_score_result(
             bet.id,
             status=BetStatus.ENCERRADA.value,
@@ -187,7 +187,7 @@ def _monta_notificacao_encerrada(apostas: list[Bet], evt: EventStatus) -> str:
     vencedor = _vencedor_nome(apostas[0], evt)
     linhas = [f"🏁 Partida encerrada: {vencedor or '?'} venceu", "", _formata_placar_por_linha(evt), ""]
     for bet in apostas:
-        resultado = resultado_checker.checar_resultado(bet.mercado, bet.jogador1, bet.jogador2, evt)
+        resultado = resultado_checker.checar_resultado(bet.mercado, bet.jogador1, bet.jogador2, evt, esporte=bet.esporte)
         odd_txt = f"{bet.odd:.2f}" if bet.odd is not None else "?"
         linhas.append(f"• {bet.mercado or 'mercado não identificado'} (odd {odd_txt}) — {_resultado_emoji(resultado)}")
     return "\n".join(linhas)
@@ -210,7 +210,7 @@ def _retentar_bet_nao_encontrada(bet: Bet) -> None:
     `if jogador2:` em matcher.find_match não detectava o placeholder e
     nunca reencaminhava pra find_canonical_match_by_name)."""
     jogador2 = bet.jogador2 if bet.jogador2 != "?" else None
-    match = find_match(bet.jogador1, jogador2)
+    match = find_match(bet.jogador1, jogador2, bet.esporte)
     if not match.encontrado:
         logger.debug("Aposta #%s: ainda não encontrada (%s x %s)", bet.id, bet.jogador1, bet.jogador2)
         return

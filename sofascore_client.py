@@ -50,6 +50,7 @@ from typing import Optional
 from playwright.sync_api import Page, sync_playwright
 
 from config import settings
+from models import Esporte
 from nameutils import pair_matches
 
 logger = logging.getLogger(__name__)
@@ -62,8 +63,23 @@ _USER_AGENT = (
 )
 
 # Cache simples em memória por processo: evita bater várias vezes na mesma
-# data quando várias tips do mesmo dia chegam em sequência.
+# data quando várias tips do mesmo dia chegam em sequência. Chave inclui o
+# esporte (ver _fetch_scheduled_events) para não misturar eventos de tênis e
+# basquete do mesmo dia num cache compartilhado.
 _cache: dict[str, list[dict]] = {}
+
+# Slug de esporte usado nos endpoints do SofaScore (/sport/{slug}/...).
+# "tennis" confirmado ao vivo por este projeto (ver docstring do módulo).
+# "basketball" confirmado ao vivo em 03/09/2026: /sport/basketball/
+# scheduled-tournaments/{data}/page/1 devolveu 29 torneios reais no dia, e
+# /event/{id} de jogos finalizados reais (ex: Catarinense, Paranaense)
+# devolveu homeScore/awayScore com period1..period4 (4 quartos) + campos
+# normaltime/overtime — mesmo formato assumido por _extrair_sets, sem
+# ajuste necessário.
+_SPORT_SLUGS = {
+    Esporte.TENIS.value: "tennis",
+    Esporte.BASQUETE.value: "basketball",
+}
 
 # Janela máxima entre o jogo devolvido pelo SofaScore e o momento da tip,
 # usada em find_canonical_match_by_name. Bug real (03/09/2026): sem esse
@@ -148,13 +164,14 @@ def _get_json(page: Page, url: str, tentativas: int = 3) -> Optional[dict]:
     return None
 
 
-def _list_tournament_ids(page: Page, dia: datetime) -> list[int]:
-    """Etapa 1: lista os IDs de todo torneio de tênis com jogo agendado no dia (todas as páginas)."""
+def _list_tournament_ids(page: Page, dia: datetime, esporte: str) -> list[int]:
+    """Etapa 1: lista os IDs de todo torneio do esporte com jogo agendado no dia (todas as páginas)."""
     data_str = dia.strftime("%Y-%m-%d")
+    slug = _SPORT_SLUGS[esporte]
     ids: set[int] = set()
     pagina = 1
     while True:
-        url = f"{SOFASCORE_BASE_URL}/sport/tennis/scheduled-tournaments/{data_str}/page/{pagina}"
+        url = f"{SOFASCORE_BASE_URL}/sport/{slug}/scheduled-tournaments/{data_str}/page/{pagina}"
         data = _get_json(page, url)
         if not data:
             break
@@ -168,21 +185,22 @@ def _list_tournament_ids(page: Page, dia: datetime) -> list[int]:
     return sorted(ids)
 
 
-def _fetch_scheduled_events(page: Page, dia: datetime) -> list[dict]:
+def _fetch_scheduled_events(page: Page, dia: datetime, esporte: str = Esporte.TENIS.value) -> list[dict]:
     """Etapa 2: para cada torneio do dia, busca os jogos (homeTeam/awayTeam/startTimestamp)."""
     data_str = dia.strftime("%Y-%m-%d")
-    if data_str in _cache:
-        return _cache[data_str]
+    cache_key = f"{esporte}:{data_str}"
+    if cache_key in _cache:
+        return _cache[cache_key]
 
     eventos: list[dict] = []
-    for tournament_id in _list_tournament_ids(page, dia):
+    for tournament_id in _list_tournament_ids(page, dia, esporte):
         url = f"{SOFASCORE_BASE_URL}/unique-tournament/{tournament_id}/scheduled-events/{data_str}"
         data = _get_json(page, url)
         if data:
             eventos.extend(data.get("events", []))
 
-    _cache[data_str] = eventos
-    logger.debug("SofaScore devolveu %d eventos de tênis para %s", len(eventos), data_str)
+    _cache[cache_key] = eventos
+    logger.debug("SofaScore devolveu %d eventos de %s para %s", len(eventos), esporte, data_str)
     return eventos
 
 
@@ -263,6 +281,7 @@ def _run_with_browser(fn):
 def find_canonical_match(
     jogador1: str,
     jogador2: str,
+    esporte: str = Esporte.TENIS.value,
     dias_de_busca: int = 3,
     referencia: Optional[datetime] = None,
 ) -> Optional[CanonicalMatch]:
@@ -280,7 +299,7 @@ def find_canonical_match(
     def _buscar(page: Page) -> Optional[CanonicalMatch]:
         for offset in range(dias_de_busca + 1):
             dia = referencia + timedelta(days=offset)
-            for evt in _fetch_scheduled_events(page, dia):
+            for evt in _fetch_scheduled_events(page, dia, esporte):
                 candidato = _extract_event(evt)
                 if not candidato:
                     continue
@@ -299,11 +318,9 @@ def find_canonical_match(
     return resultado
 
 
-_TENNIS_SPORT_SLUG = "tennis"
-
-
 def find_canonical_match_by_name(
     jogador: str,
+    esporte: str = Esporte.TENIS.value,
     referencia: Optional[datetime] = None,
 ) -> Optional[CanonicalMatch]:
     """
@@ -337,9 +354,10 @@ def find_canonical_match_by_name(
             entity = r.get("entity") or {}
             sport = (entity.get("sport") or {}).get("slug")
             # a busca cobre todos os esportes/times/torneios; filtra só
-            # entidades de tênis com id (jogadores aparecem como type="team"
-            # nesse endpoint — é como o SofaScore trata "participante" aqui).
-            if sport == _TENNIS_SPORT_SLUG and entity.get("id"):
+            # entidades do esporte pedido com id (jogadores/times aparecem
+            # como type="team" nesse endpoint — é como o SofaScore trata
+            # "participante" aqui, tanto pra tênis quanto pra basquete).
+            if sport == _SPORT_SLUGS[esporte] and entity.get("id"):
                 player_ids.append(entity["id"])
 
         if not player_ids:
@@ -396,12 +414,21 @@ _WINNER_CODE_HOME = 1
 _WINNER_CODE_AWAY = 2
 
 
+_MAX_PERIODOS = 9  # tênis: até 5 sets. basquete: 4 quartos + overtimes (raramente mais de 1-2, mas sem teto formal)
+
+
 def _extrair_sets(home_score: dict, away_score: dict) -> list[tuple[int, int]]:
-    """Lista de (games_home, games_away) por set, a partir dos campos
-    period1..period5 de homeScore/awayScore. Sets ainda não jogados vêm
-    ausentes/None e são ignorados."""
+    """Lista de (pontos_home, pontos_away) por período, a partir dos campos
+    period1..periodN de homeScore/awayScore. Períodos ainda não jogados vêm
+    ausentes/None e são ignorados.
+
+    Nome mantido "sets"/"_extrair_sets" por compatibilidade com todo código
+    existente (EventStatus.sets, resultado_checker.py, score_updater.py,
+    espelho TS) — para tênis é games-por-set, para basquete é pontos-por-
+    quarto/overtime (ver models.Esporte). A estrutura (list[tuple[int,int]])
+    é idêntica nos dois casos, só a semântica muda."""
     sets = []
-    for i in range(1, 6):  # tênis tem no máximo 5 sets
+    for i in range(1, _MAX_PERIODOS + 1):
         chave = f"period{i}"
         h = home_score.get(chave)
         a = away_score.get(chave)

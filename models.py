@@ -20,6 +20,17 @@ from typing import Optional
 # (bookmakers/* não deveria depender de models.py).
 
 
+class Esporte(str, Enum):
+    """Esporte da aposta — determina qual lógica de matching/conferência de
+    resultado se aplica (ver sofascore_client._SPORT_SLUGS,
+    resultado_checker.checar_resultado). jogador1/jogador2 seguem sendo o
+    nome do "lado 1"/"lado 2" do confronto independente do esporte — é só
+    o nome de um jogador (tênis) ou de um time (basquete)."""
+
+    TENIS = "tenis"
+    BASQUETE = "basquete"
+
+
 class TipoAposta(str, Enum):
     """Distingue uma tip de 1 confronto (o caso original do projeto) de uma
     aposta múltipla/combinada (vários jogos numa odd só) — ver
@@ -72,6 +83,7 @@ class ExtractedBet:
     texto_bruto: str = ""           # texto OCR + legenda, para debug/auditoria
     tipo_aposta: str = TipoAposta.SIMPLES.value  # ver TipoAposta — só o motor Gemini detecta multipla hoje
     selecoes: list[str] = field(default_factory=list)  # só para multipla, ver Bet.selecoes
+    esporte: str = Esporte.TENIS.value  # ver Esporte — default tênis para não quebrar caminhos que ainda não detectam
 
     @property
     def valido(self) -> bool:
@@ -115,6 +127,7 @@ class MatchInfo:
     jogador2_oficial: Optional[str] = None
     links: dict = field(default_factory=dict)
     sofascore_event_id: Optional[int] = None
+    esporte: str = Esporte.TENIS.value
 
 
 @dataclass
@@ -140,6 +153,7 @@ class Bet:
     resultado: str = ResultadoAposta.PENDENTE.value  # se A APOSTA ganhou — definido manualmente no painel
     tipo_aposta: str = TipoAposta.SIMPLES.value      # "simples" (1 confronto) ou "multipla" (ver TipoAposta)
     selecoes: list[str] = field(default_factory=list)  # só para multipla: 1 item por seleção, ex: "Alcaraz"
+    esporte: str = Esporte.TENIS.value               # ver Esporte — "tenis" ou "basquete"
 
     @property
     def jogo(self) -> str:

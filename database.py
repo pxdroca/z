@@ -77,6 +77,10 @@ _EXTRA_COLUMNS = {
     # lista real de seleções fica em selecoes_json.
     "tipo_aposta": "TEXT DEFAULT 'simples'",
     "selecoes_json": "TEXT",
+    # esporte: 'tenis' ou 'basquete' (ver models.Esporte) — determina qual
+    # lógica de matching/conferência de resultado se aplica. Default 'tenis'
+    # cobre as linhas existentes, todas anteriores ao suporte a basquete.
+    "esporte": "TEXT DEFAULT 'tenis'",
 }
 
 
@@ -143,6 +147,7 @@ def _row_to_bet(row: dict) -> Bet:
         resultado=row["resultado"] or ResultadoAposta.PENDENTE.value,
         tipo_aposta=row.get("tipo_aposta") or "simples",
         selecoes=selecoes,
+        esporte=row.get("esporte") or "tenis",
     )
 
 
@@ -160,8 +165,9 @@ def insert_bet(bet: Bet) -> int:
             """
             INSERT INTO bets (jogador1, jogador2, torneio, mercado, odd,
                                data_hora, links_json, status, fonte_texto, mensagem_id,
-                               sofascore_event_id, unidades, resultado, tipo_aposta, selecoes_json)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                               sofascore_event_id, unidades, resultado, tipo_aposta, selecoes_json,
+                               esporte)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -180,6 +186,7 @@ def insert_bet(bet: Bet) -> int:
                 bet.resultado,
                 bet.tipo_aposta,
                 json.dumps(bet.selecoes, ensure_ascii=False) if bet.selecoes else None,
+                bet.esporte,
             ),
         )
         new_id = cur.fetchone()["id"]

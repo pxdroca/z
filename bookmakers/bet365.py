@@ -42,6 +42,7 @@ from datetime import datetime
 from typing import Optional
 
 from config import settings
+from models import Esporte
 from nameutils import pair_matches
 
 from .base import BookmakerAdapter
@@ -63,13 +64,18 @@ class Bet365Adapter(BookmakerAdapter):
     display_name = "bet365"
     base_url = settings.BET365_BASE_URL        # CONFIRME o domínio real! (ver aviso acima)
     tennis_path = settings.BET365_TENNIS_PATH   # ex: /SP/tenis  (CONFIRME!)
+    # TODO calibrar ao vivo (ver config.py) — hash de basquete nunca testado.
+    basketball_path = settings.BET365_BASKETBALL_PATH
 
-    def build_fallback_link(self, torneio, data_hora):
-        return f"{self.base_url.rstrip('/')}{self.tennis_path}"
+    def _path_for(self, esporte: str) -> str:
+        return self.tennis_path if esporte == Esporte.TENIS.value else self.basketball_path
 
-    def find_exact_link(self, jogador1, jogador2, torneio, data_hora):
+    def build_fallback_link(self, torneio, data_hora, esporte: str = Esporte.TENIS.value):
+        return f"{self.base_url.rstrip('/')}{self._path_for(esporte)}"
+
+    def find_exact_link(self, jogador1, jogador2, torneio, data_hora, esporte: str = Esporte.TENIS.value):
         threshold = settings.SUPERBET_FUZZY_THRESHOLD
-        url = f"{self.base_url.rstrip('/')}{self.tennis_path}"
+        url = f"{self.base_url.rstrip('/')}{self._path_for(esporte)}"
 
         def _buscar(page):
             if not self._safe_goto(page, url):

@@ -31,6 +31,7 @@ import logging
 from urllib.parse import urljoin
 
 from config import settings
+from models import Esporte
 from nameutils import pair_matches
 
 from .base import BookmakerAdapter
@@ -49,14 +50,22 @@ class BetanoAdapter(BookmakerAdapter):
     base_url = settings.BETANO_BASE_URL       # ex: https://betano.bet.br
     tennis_path = settings.BETANO_TENNIS_PATH  # ex: /sport/tenis/
     jogos_de_hoje_path = "/sport/tenis/jogos-de-hoje/"
+    # TODO calibrar ao vivo (ver config.py) — path de basquete nunca testado.
+    basketball_path = settings.BETANO_BASKETBALL_PATH
 
-    def build_fallback_link(self, torneio, data_hora):
-        # Sem parâmetro de dia confirmado — leva pra seção geral de tênis.
-        return f"{self.base_url.rstrip('/')}{self.tennis_path}"
+    def _path_for(self, esporte: str) -> str:
+        return self.tennis_path if esporte == Esporte.TENIS.value else self.basketball_path
 
-    def find_exact_link(self, jogador1, jogador2, torneio, data_hora):
+    def build_fallback_link(self, torneio, data_hora, esporte: str = Esporte.TENIS.value):
+        # Sem parâmetro de dia confirmado — leva pra seção geral do esporte.
+        return f"{self.base_url.rstrip('/')}{self._path_for(esporte)}"
+
+    def find_exact_link(self, jogador1, jogador2, torneio, data_hora, esporte: str = Esporte.TENIS.value):
         threshold = settings.SUPERBET_FUZZY_THRESHOLD
-        url = f"{self.base_url.rstrip('/')}{self.jogos_de_hoje_path}"
+        # jogos_de_hoje_path só confirmado para tênis — basquete cai na
+        # seção geral (mesmo path do fallback) até ser calibrado ao vivo.
+        path = self.jogos_de_hoje_path if esporte == Esporte.TENIS.value else self.basketball_path
+        url = f"{self.base_url.rstrip('/')}{path}"
 
         def _buscar(page):
             if not self._safe_goto(page, url):

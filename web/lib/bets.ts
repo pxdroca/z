@@ -25,6 +25,7 @@ interface BetRow {
   resultado: string | null;
   tipo_aposta: string | null;
   selecoes_json: string | null;
+  esporte: string | null;
 }
 
 // Port de models.Bet.jogo (property) — mesma lógica: múltipla mostra as
@@ -71,6 +72,7 @@ function rowToBet(row: BetRow): Bet {
     resultado: (row.resultado ?? "pendente") as ResultadoAposta,
     tipo_aposta: (row.tipo_aposta ?? "simples") as Bet["tipo_aposta"],
     selecoes,
+    esporte: (row.esporte ?? "tenis") as Bet["esporte"],
   };
   return { ...semJogo, jogo: computeJogo(semJogo) };
 }

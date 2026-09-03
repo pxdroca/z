@@ -30,7 +30,7 @@ from functools import lru_cache
 from typing import Optional
 
 from config import settings
-from models import ExtractedBet
+from models import Esporte, ExtractedBet
 from nameutils import names_match
 
 logger = logging.getLogger(__name__)
@@ -63,14 +63,19 @@ def ocr_image_easyocr(image_path: str) -> str:
 # ==============================================================================
 
 _GEMINI_PROMPT = """\
-Você recebe o print de uma dica (tip) de aposta esportiva de tênis, enviada em um
-grupo de Telegram. Primeiro identifique se é uma aposta SIMPLES (1 confronto só)
-ou uma MÚLTIPLA/COMBINADA (várias seleções de jogos diferentes combinadas numa
-odd só — geralmente um app de apostas mostra isso como uma lista de "Nome - Nome"
-com um mercado e uma sub-odd cada, seguido de uma odd total bem maior que
-qualquer sub-odd individual). Sinais de múltipla: cabeçalho tipo "N SELEÇÕES",
-"SIMPLES • N" (esse "SIMPLES" ali é o TIPO de aposta de cada perna individual,
-não quer dizer que a aposta toda tem 1 jogo só), ou texto "+N seleções mais".
+Você recebe o print de uma dica (tip) de aposta esportiva de TÊNIS OU BASQUETE,
+enviada em um grupo de Telegram. Primeiro identifique o ESPORTE: tênis tem 2
+JOGADORES individuais (nome próprio de pessoa, ex: "Djokovic", "Alcaraz");
+basquete tem 2 TIMES (nome de franquia/cidade, ex: "Los Angeles Lakers",
+"Boston Celtics", "Flamengo"), frequentemente citado junto de uma liga (NBA,
+NBB, Euroliga, NCAA, FIBA). Depois identifique se é uma aposta SIMPLES (1
+confronto só) ou uma MÚLTIPLA/COMBINADA (várias seleções de jogos diferentes
+combinadas numa odd só — geralmente um app de apostas mostra isso como uma
+lista de "Nome - Nome" com um mercado e uma sub-odd cada, seguido de uma odd
+total bem maior que qualquer sub-odd individual). Sinais de múltipla:
+cabeçalho tipo "N SELEÇÕES", "SIMPLES • N" (esse "SIMPLES" ali é o TIPO de
+aposta de cada perna individual, não quer dizer que a aposta toda tem 1 jogo
+só), ou texto "+N seleções mais".
 
 IMPORTANTE — nem toda mensagem do grupo é uma tip nova. Mensagens como
 "Zheng está pago! Cash", "Merida está pago!", avisos de resultado (green/red),
@@ -87,23 +92,27 @@ Responda SOMENTE com um JSON válido, sem markdown, sem comentários, no formato
 exato:
 
 {
+  "esporte": "tenis" ou "basquete",
+
   "tipo_aposta": "simples" ou "multipla",
 
   // Preencha isto SE tipo_aposta == "simples" (senão deixe tudo null):
   // "jogador2" pode ficar null mesmo em tipo_aposta="simples" — é comum o
   // tipster citar só o favorito (ex: "Hurkacz odd: 2.85"), sem o
   // adversário; jogador1 nesse caso é o único nome citado.
-  "jogador1": "nome do primeiro tenista, ou o único citado (ou null se não achar nenhum)",
-  "jogador2": "nome do segundo tenista (ou null se só um foi citado, ou se não achar)",
-  "torneio": "nome do torneio/circuito, ex: 'ATP Us Open' (ou null)",
-  // mercado: qualquer mercado de aposta de tênis, ex: "Vencedor da
-  // partida", "Vencedor do 2º set", "Over 22.5 games", "Total de aces
+  "jogador1": "nome do primeiro tenista OU time, ou o único citado (ou null se não achar nenhum)",
+  "jogador2": "nome do segundo tenista OU time (ou null se só um foi citado, ou se não achar)",
+  "torneio": "nome do torneio/circuito/liga, ex: 'ATP Us Open' ou 'NBA' (ou null)",
+  // mercado: qualquer mercado de aposta de tênis OU basquete, ex: "Vencedor
+  // da partida", "Vencedor do 2º set", "Over 22.5 games", "Total de aces
   // mais de 8.5", "Dupla falta", "Vencer sem perder set", "Placar exato
-  // 2-0", "Tie-break", "Handicap de games -3.5" etc — extraia o mercado
-  // como ele aparece no print/legenda, não se limite aos exemplos acima.
-  // Se só o nome do jogador + a odd forem citados, sem mercado explícito
-  // (ex: "Hurkacz odd: 2.85"), assuma "Vencedor da partida" (é o mercado
-  // implícito mais comum nesse caso).
+  // 2-0", "Tie-break", "Handicap de games -3.5" (tênis); "Handicap Lakers
+  // -5.5", "Mais de 215.5 pontos", "Menos de 210.5 pontos", "Vencedor da
+  // partida" (basquete) etc — extraia o mercado como ele aparece no
+  // print/legenda, não se limite aos exemplos acima.
+  // Se só o nome do jogador/time + a odd forem citados, sem mercado
+  // explícito (ex: "Hurkacz odd: 2.85"), assuma "Vencedor da partida" (é o
+  // mercado implícito mais comum nesse caso).
   "mercado": "mercado da aposta (ou null só se genuinamente não der pra inferir)",
 
   // Preencha isto SE tipo_aposta == "multipla" (senão deixe null/[]):
@@ -176,6 +185,12 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
     except (TypeError, ValueError):
         odd = None
 
+    # Fallback "tenis" se o Gemini não preencher (ou vier algo inesperado) —
+    # não é garantido que o modelo sempre siga o contrato à risca.
+    esporte = data.get("esporte")
+    if esporte not in (Esporte.TENIS.value, Esporte.BASQUETE.value):
+        esporte = Esporte.TENIS.value
+
     if data.get("tipo_aposta") == "multipla":
         selecoes = [s for s in (data.get("selecoes") or []) if s]
         selecoes_ocultas = bool(data.get("selecoes_ocultas"))
@@ -190,6 +205,7 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
             tipo_aposta="multipla",
             selecoes=selecoes,
             confianca=0.7 if (odd is not None and selecoes) else 0.4,
+            esporte=esporte,
         )
 
     jogador1 = data.get("jogador1")
@@ -223,6 +239,7 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
         odd=odd,
         texto_bruto=caption_text,
         confianca=confianca,
+        esporte=esporte,
     )
     return bet
 
@@ -321,9 +338,30 @@ _MARKET_KEYWORDS = re.compile(
     r"vence(?:r)? sem perder set(?:s)?|vence(?:r)? sem perder \d\s*sets?|"
     r"vence(?:r)? com \d\s*sets?|"
     r"vencedor por \d\s*x\s*\d|"
-    r"tie[\s\-]?break)\b(?:(?!odd\b|@|cota\b)[^\n:])*",
+    r"tie[\s\-]?break|"
+    # Basquete: handicap de pontos por time e total de pontos (over/under).
+    r"handicap(?: de pontos)?\s*[+-]?\s*\d+[.,]?\d*|"
+    r"(?:mais|menos|over|under)\s+de\s+\d+[.,]?\d*\s*pontos?)\b(?:(?!odd\b|@|cota\b)[^\n:])*",
     re.IGNORECASE,
 )
+
+# Palavras-chave que sinalizam basquete (liga, terminologia de jogo) —
+# usadas pelo parser regex local para decidir esporte quando o texto não
+# vier de um motor que já classifica (Gemini). Best-effort: sem essas
+# palavras, o texto é tratado como tênis (comportamento atual preservado).
+_BASQUETE_KEYWORDS = re.compile(
+    r"\b(NBA|NBB|EUROLIGA|EUROCUP|NCAA|FIBA|BASQUETE|BASKETBALL|QUARTO|"
+    r"OVERTIME|PRORROGA[ÇC][ÃA]O|HANDICAP)\b",
+    re.IGNORECASE,
+)
+
+
+def _detectar_esporte(texto: str) -> str:
+    """Best-effort: basquete se o texto citar liga/terminologia de basquete,
+    senão tênis (default — preserva o comportamento atual do parser)."""
+    if _BASQUETE_KEYWORDS.search(texto or ""):
+        return Esporte.BASQUETE.value
+    return Esporte.TENIS.value
 
 # Tipsters costumam escrever só o nome do favorito antes da odd, sem citar o
 # mercado explicitamente — ex: "Aposta ao vivo: Arnaldi odd: 1.72". Nesse
@@ -550,12 +588,53 @@ def parse_free_text(texto: str) -> ExtractedBet:
         odd=odd,
         texto_bruto=texto,
         confianca=round(confianca, 2),
+        esporte=_detectar_esporte(texto),
     )
 
 
 # ==============================================================================
 # 4) FUNÇÃO PRINCIPAL — chamada pelo listener.py
 # ==============================================================================
+
+def _extract_with_easyocr_and_text(
+    image_path: Optional[str], caption_text: str, timeout_s: Optional[float] = None
+) -> ExtractedBet:
+    """EasyOCR na imagem (se houver) combinado com a legenda, via parse_free_text.
+    Usado tanto quando OCR_ENGINE=easyocr quanto como fallback de
+    OCR_ENGINE=gemini quando a chamada ao Gemini falha (ver extract_bet_info).
+
+    timeout_s: limite de tempo pro EasyOCR (carregar modelo + ler a imagem).
+    Sem isso, o fallback do Gemini herdaria o mesmo custo de "1ª execução
+    baixa os modelos (~200MB) e demora mais" que o modo OCR_ENGINE=easyocr
+    já documenta — só que aqui rodando dentro do timeout-minutes: 4 do
+    workflow (poll-listener.yml), que também precisa sobrar tempo pro resto
+    do pipeline (Playwright/matcher). Sem limite, um fallback lento poderia
+    estourar o timeout do job inteiro em vez de simplesmente degradar pro
+    parser de só-texto. None (usado no caminho OCR_ENGINE=easyocr, onde o
+    EasyOCR já É o motor escolhido, não um fallback de emergência) = sem
+    limite, mesmo comportamento de sempre."""
+    ocr_text = ""
+    if image_path:
+        try:
+            if timeout_s is not None:
+                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(ocr_image_easyocr, image_path)
+                    try:
+                        ocr_text = future.result(timeout=timeout_s)
+                    except FutureTimeoutError:
+                        logger.warning(
+                            "EasyOCR (fallback do Gemini) não terminou em %.0fs, seguindo só com a legenda.",
+                            timeout_s,
+                        )
+            else:
+                ocr_text = ocr_image_easyocr(image_path)
+        except Exception:
+            logger.exception("Falha no EasyOCR, seguindo só com a legenda.")
+    texto_combinado = f"{caption_text}\n{ocr_text}".strip()
+    return parse_free_text(texto_combinado)
+
 
 def extract_bet_info(image_path: Optional[str], caption_text: Optional[str] = None) -> ExtractedBet:
     """
@@ -571,17 +650,26 @@ def extract_bet_info(image_path: Optional[str], caption_text: Optional[str] = No
         try:
             bet = extract_with_gemini(image_path, caption_text)
         except Exception:
-            logger.exception("Falha ao usar Gemini, caindo para parser de texto puro.")
-            bet = parse_free_text(caption_text)
+            # Bug real visto em produção (03/09/2026): o Gemini caiu com 503
+            # ("high demand") bem no momento de 2 tips que tinham print
+            # anexado ("Kilian vencer o 2º set", "Moro canas vencer o 2º
+            # set"). Cair direto para parse_free_text(caption_text) ignora a
+            # imagem por completo — se o nome do jogador só aparece no print
+            # (não na legenda digitada pelo tipster), o nome extraído sai
+            # truncado/incompleto, e nem a Superbet nem o SofaScore
+            # conseguem casar depois (mesmo os dois funcionando certo — o
+            # problema é a entrada ruim, não o matching). Por isso, se há
+            # imagem, tenta o EasyOCR local como 2ª linha de defesa antes de
+            # cair pro parser de só-texto — mesma lógica usada quando
+            # OCR_ENGINE=easyocr (ver _extract_with_easyocr_and_text).
+            logger.exception("Falha ao usar Gemini, tentando EasyOCR como fallback.")
+            # 90s: generoso o bastante pra baixar os modelos na 1ª chamada
+            # de um runner novo (~200MB) e ler 1 imagem, mas curto o
+            # bastante pra sempre sobrar tempo dentro do timeout-minutes: 4
+            # do workflow — ver docstring de _extract_with_easyocr_and_text.
+            bet = _extract_with_easyocr_and_text(image_path, caption_text, timeout_s=90.0)
     else:
-        ocr_text = ""
-        if image_path:
-            try:
-                ocr_text = ocr_image_easyocr(image_path)
-            except Exception:
-                logger.exception("Falha no EasyOCR, seguindo só com a legenda.")
-        texto_combinado = f"{caption_text}\n{ocr_text}".strip()
-        bet = parse_free_text(texto_combinado)
+        bet = _extract_with_easyocr_and_text(image_path, caption_text)
 
     # Se o texto explícito da legenda tiver labels que o OCR/print não tinha
     # (comum: tipster escreve "Odd: 1.85" na legenda, print só mostra o jogo),
@@ -614,6 +702,12 @@ def extract_bet_info(image_path: Optional[str], caption_text: Optional[str] = No
         bet.torneio = bet.torneio or extra.torneio
         bet.jogador1 = bet.jogador1 or extra.jogador1
         bet.jogador2 = bet.jogador2 or extra.jogador2
+        # bet.esporte nunca fica "vazio" (sempre tem um default) — só
+        # promove pra basquete se a legenda sozinha sinalizar isso e o
+        # resultado principal ainda estiver no default "tenis" (evita
+        # sobrescrever uma detecção de basquete já feita pelo Gemini/OCR).
+        if bet.esporte == Esporte.TENIS.value and extra.esporte == Esporte.BASQUETE.value:
+            bet.esporte = extra.esporte
 
     if bet.tipo_aposta == "multipla":
         logger.info(

@@ -46,6 +46,7 @@ from urllib.parse import quote, urljoin
 from zoneinfo import ZoneInfo
 
 from config import settings
+from models import Esporte
 from nameutils import pair_matches
 
 from .base import BookmakerAdapter
@@ -71,6 +72,18 @@ _SEARCH_URL = "https://superbet.bet.br/busca"
 # Só "hoje" (offset 0) foi confirmado ao vivo; "amanha" é um chute educado.
 # offsets fora daqui caem para a página sem filtro de dia (ver _day_param).
 _DAY_KEYWORDS = {0: "hoje", 1: "amanha"}
+
+# Slug de path usado no filtro da busca (/odds/{slug}/...) — ver _search.
+# "tenis" confirmado ao vivo em 02/09/2026 (ver docstring do módulo).
+# "basquete" confirmado ao vivo em 03/09/2026: busca por "Lakers" devolveu
+# 'https://superbet.bet.br/odds/basquete/los-angeles-lakers-x-philadelphia-
+# 76ers-14461896' — o filtro por substring "/odds/basquete/" corretamente
+# aceita esse link e rejeita "/odds/e-sport-basquete/..." (que também
+# apareceu na mesma busca, mas é e-sports, não basquete real).
+_PATH_SLUG = {
+    Esporte.TENIS.value: "tenis",
+    Esporte.BASQUETE.value: "basquete",
+}
 
 
 @dataclass
@@ -121,17 +134,24 @@ def _parse_match_time(texto: str, referencia: datetime) -> Optional[datetime]:
 class SuperbetAdapter(BookmakerAdapter):
     slug = "superbet"
     display_name = "Superbet"
-    base_url = settings.SUPERBET_BASE_URL  # ex: https://superbet.bet.br/apostas/tenis
+    base_url = settings.SUPERBET_BASE_URL  # ex: https://superbet.bet.br/apostas/tenis — mantido p/ compatibilidade
+    # URL base por esporte — ver config.py (SUPERBET_BASKETBALL_URL é TODO de
+    # calibração ao vivo, path presumido por analogia com o de tênis).
+    _BASE_URLS = {
+        Esporte.TENIS.value: settings.SUPERBET_BASE_URL,
+        Esporte.BASQUETE.value: settings.SUPERBET_BASKETBALL_URL,
+    }
 
-    def _url_for_offset(self, offset: int) -> str:
+    def _url_for_offset(self, offset: int, esporte: str = Esporte.TENIS.value) -> str:
+        base_url = self._BASE_URLS[esporte]
         param = _day_param(offset)
-        return f"{self.base_url}?day={param}" if param else self.base_url
+        return f"{base_url}?day={param}" if param else base_url
 
-    def build_fallback_link(self, torneio, data_hora):
-        return self._url_for_offset(_offset_days(data_hora))
+    def build_fallback_link(self, torneio, data_hora, esporte: str = Esporte.TENIS.value):
+        return self._url_for_offset(_offset_days(data_hora), esporte)
 
-    def _scrape_day(self, page, offset: int) -> list[_RawMatch]:
-        url = self._url_for_offset(offset)
+    def _scrape_day(self, page, offset: int, esporte: str = Esporte.TENIS.value) -> list[_RawMatch]:
+        url = self._url_for_offset(offset, esporte)
         if not self._safe_goto(page, url):
             return []
 
@@ -177,7 +197,7 @@ class SuperbetAdapter(BookmakerAdapter):
 
         return list(matches_by_href.values())
 
-    def _search(self, page, termo: str) -> list[_RawMatch]:
+    def _search(self, page, termo: str, esporte: str = Esporte.TENIS.value) -> list[_RawMatch]:
         """Busca por nome via /busca?query=... — ver docstring do módulo."""
         url = f"{_SEARCH_URL}?query={quote(termo)}"
         if not self._safe_goto(page, url):
@@ -200,13 +220,14 @@ class SuperbetAdapter(BookmakerAdapter):
             logger.debug("superbet: busca por %r não renderizou cards (sem resultados?).", termo)
             return []
 
+        path_slug = _PATH_SLUG[esporte]
         matches: list[_RawMatch] = []
         for card in page.query_selector_all(_SELECTORS["match_card"]):
             href = card.get_attribute("href")
-            # A busca cobre todos os esportes — filtra só tênis pelo path
-            # do link (evita falso positivo tipo um time de futebol/e-sports
+            # A busca cobre todos os esportes — filtra pelo path do esporte
+            # pedido (evita falso positivo tipo um time de futebol/e-sports
             # cujo nome contém o termo buscado, ex: "Sinner" -> time "Sinners").
-            if not href or "/odds/tenis/" not in href:
+            if not href or f"/odds/{path_slug}/" not in href:
                 continue
             j1_el = card.query_selector(_SELECTORS["player1_name"])
             j2_el = card.query_selector(_SELECTORS["player2_name"])
@@ -219,9 +240,9 @@ class SuperbetAdapter(BookmakerAdapter):
             matches.append(_RawMatch(jogador1=jogador1, jogador2=jogador2, horario_texto=horario_texto, link=urljoin(url, href)))
         return matches
 
-    def buscar_confrontos(self, termo: str) -> list[tuple[str, str, str]]:
-        """Confrontos de tênis que a busca da Superbet devolve para `termo`,
-        como (jogador1, jogador2, link).
+    def buscar_confrontos(self, termo: str, esporte: str = Esporte.TENIS.value) -> list[tuple[str, str, str]]:
+        """Confrontos que a busca da Superbet devolve para `termo`, no
+        esporte pedido, como (jogador1, jogador2, link).
 
         Existe para a validação cruzada em matcher.confirmar_confronto: a
         Superbet lista SÓ jogos futuros/abertos pra aposta, então servir de
@@ -232,10 +253,10 @@ class SuperbetAdapter(BookmakerAdapter):
         if not termo:
             return []
         def _buscar(page):
-            return [(c.jogador1, c.jogador2, c.link) for c in self._search(page, termo)]
+            return [(c.jogador1, c.jogador2, c.link) for c in self._search(page, termo, esporte)]
         return self._run_with_browser(_buscar) or []
 
-    def find_exact_link(self, jogador1, jogador2, torneio, data_hora):
+    def find_exact_link(self, jogador1, jogador2, torneio, data_hora, esporte: str = Esporte.TENIS.value):
         threshold = settings.SUPERBET_FUZZY_THRESHOLD
 
         def _buscar(page):
@@ -245,7 +266,7 @@ class SuperbetAdapter(BookmakerAdapter):
             for termo in (jogador1, jogador2):
                 if not termo:
                     continue
-                for c in self._search(page, termo):
+                for c in self._search(page, termo, esporte):
                     if pair_matches(jogador1, jogador2, c.jogador1, c.jogador2, threshold):
                         return c.link
 
@@ -254,7 +275,7 @@ class SuperbetAdapter(BookmakerAdapter):
             offset_alvo = _offset_days(data_hora)
             offsets = sorted({o for o in (offset_alvo, 0, 1) if _day_param(o) is not None})
             for offset in offsets:
-                for c in self._scrape_day(page, offset):
+                for c in self._scrape_day(page, offset, esporte):
                     if pair_matches(jogador1, jogador2, c.jogador1, c.jogador2, threshold):
                         return c.link
             return None

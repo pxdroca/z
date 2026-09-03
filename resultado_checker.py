@@ -24,6 +24,15 @@ exato, tie-break, "vencer com/sem perder N sets" — esses seguem manuais):
   - "{Nome} vencer sem perder set" (sem número) — o jogador venceu a
     partida E não perdeu nenhum set.
 
+Basquete (ver _checar_resultado_basquete) cobre separadamente:
+  - Moneyline/vencedor da partida (mesmo padrão/lógica do tênis).
+  - Handicap de pontos por time (ex: "Lakers -5.5").
+  - Total de pontos, over/under (ex: "Mais de 215.5 pontos").
+  Mercados de jogador individual (pontos/rebotes/assistências) NÃO são
+  cobertos — o SofaScore/365scores client usados aqui não trazem estatística
+  de jogador, só placar por período. Ficam manuais, igual aos mercados de
+  tênis não cobertos.
+
 Devolve None quando o mercado não é reconhecido (mercados fora da lista
 acima) ou quando falta dado pra decidir (ex: pediu o 3º set mas a partida
 não chegou lá) — nesses casos o resultado continua "pendente", conferência
@@ -35,7 +44,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from models import ResultadoAposta
+from models import Esporte, ResultadoAposta
 from nameutils import names_match
 from sofascore_client import EventStatus
 
@@ -45,6 +54,15 @@ _PADRAO_PARTIDA = re.compile(r"^(.+?)\s+(?:vencer a partida|vencedor da partida|
 _PADRAO_SET_ESPECIFICO = re.compile(r"^(.+?)\s+vencer o (\d)º set$", re.IGNORECASE)
 _PADRAO_SET_GENERICO = re.compile(r"^(.+?)\s+vencer um set$", re.IGNORECASE)
 _PADRAO_SEM_PERDER_SET = re.compile(r"^(.+?)\s+vencer sem perder set(?:s)?$", re.IGNORECASE)
+
+# Basquete: "Lakers -5.5" / "Handicap Celtics +3.5" / "Handicap: Lakers -5.5"
+_PADRAO_HANDICAP = re.compile(
+    r"^(?:handicap\s*(?:de pontos)?\s*[:\-]?\s*)?(.+?)\s+([+-]\s?\d+(?:[.,]\d+)?)$", re.IGNORECASE,
+)
+# Basquete: "Mais de 215.5 pontos" / "Menos de 210.5" / "Over 215.5" / "Under 210.5 pontos"
+_PADRAO_TOTAL_PONTOS = re.compile(
+    r"^(mais|menos|over|under)\s+de\s+(\d+(?:[.,]\d+)?)\s*(?:pontos?)?$", re.IGNORECASE,
+)
 
 
 def _nome_bate(citado: str, jogador1: Optional[str], jogador2: Optional[str]) -> Optional[str]:
@@ -91,7 +109,8 @@ def checar_resultado_de_bet(bet) -> Optional[str]:
         vencedor="home" if vencedor_lado == "jogador1" else "away",
         sets=sets,
     )
-    return checar_resultado(bet.mercado, bet.jogador1, bet.jogador2, evt)
+    esporte = getattr(bet, "esporte", None) or Esporte.TENIS.value
+    return checar_resultado(bet.mercado, bet.jogador1, bet.jogador2, evt, esporte=esporte)
 
 
 def checar_resultado(
@@ -99,23 +118,40 @@ def checar_resultado(
     jogador1: Optional[str],
     jogador2: Optional[str],
     evt: EventStatus,
+    esporte: str = Esporte.TENIS.value,
 ) -> Optional[str]:
     """
-    Devolve ResultadoAposta.GREEN.value / .RED.value, ou None se o mercado
-    não é reconhecido ou falta dado (partida ainda não com sets suficientes
-    — não deveria acontecer se evt.status == "finished", mas por segurança).
+    Devolve ResultadoAposta.GREEN.value / .RED.value / .VOID.value, ou None
+    se o mercado não é reconhecido ou falta dado pra decidir. Despacha para
+    a lógica do esporte correspondente (ver _checar_resultado_tenis /
+    _checar_resultado_basquete).
     """
     if not mercado or evt.status != "finished":
         return None
     mercado = mercado.strip()
 
+    if esporte == Esporte.BASQUETE.value:
+        return _checar_resultado_basquete(mercado, jogador1, jogador2, evt)
+    return _checar_resultado_tenis(mercado, jogador1, jogador2, evt)
+
+
+def _checar_moneyline(mercado: str, jogador1: Optional[str], jogador2: Optional[str], evt: EventStatus) -> Optional[str]:
+    """Vencedor da partida — mesmo texto de mercado e mesma lógica para
+    tênis e basquete (compara com evt.vencedor, agnóstico de esporte)."""
+    m = _PADRAO_PARTIDA.match(mercado)
+    if not m:
+        return None
+    lado = _nome_bate(m.group(1).strip(), jogador1, jogador2)
+    if lado is None or evt.vencedor is None:
+        return None
+    venceu = (lado == "jogador1" and evt.vencedor == "home") or (lado == "jogador2" and evt.vencedor == "away")
+    return ResultadoAposta.GREEN.value if venceu else ResultadoAposta.RED.value
+
+
+def _checar_resultado_tenis(mercado: str, jogador1: Optional[str], jogador2: Optional[str], evt: EventStatus) -> Optional[str]:
     m = _PADRAO_PARTIDA.match(mercado)
     if m:
-        lado = _nome_bate(m.group(1).strip(), jogador1, jogador2)
-        if lado is None or evt.vencedor is None:
-            return None
-        venceu = (lado == "jogador1" and evt.vencedor == "home") or (lado == "jogador2" and evt.vencedor == "away")
-        return ResultadoAposta.GREEN.value if venceu else ResultadoAposta.RED.value
+        return _checar_moneyline(mercado, jogador1, jogador2, evt)
 
     m = _PADRAO_SET_ESPECIFICO.match(mercado)
     if m:
@@ -153,5 +189,51 @@ def checar_resultado(
             for games_j1, games_j2 in evt.sets
         )
         return ResultadoAposta.RED.value if perdeu_algum_set else ResultadoAposta.GREEN.value
+
+    return None
+
+
+def _checar_resultado_basquete(mercado: str, jogador1: Optional[str], jogador2: Optional[str], evt: EventStatus) -> Optional[str]:
+    """Cobre moneyline, handicap de pontos por time e total de pontos
+    (over/under). Mercados de jogador individual (pontos/rebotes/
+    assistências) não são cobertos — evt.sets só tem placar por período, sem
+    estatística de jogador — caem em None (pendente, conferência manual)."""
+    if _PADRAO_PARTIDA.match(mercado):
+        return _checar_moneyline(mercado, jogador1, jogador2, evt)
+
+    if not evt.sets:
+        return None
+
+    m = _PADRAO_HANDICAP.match(mercado)
+    if m:
+        lado = _nome_bate(m.group(1).strip(), jogador1, jogador2)
+        if lado is None:
+            return None
+        try:
+            linha = float(m.group(2).replace(" ", "").replace(",", "."))
+        except ValueError:
+            return None
+        pontos_j1 = sum(h for h, _ in evt.sets)
+        pontos_j2 = sum(a for _, a in evt.sets)
+        pontos_lado, pontos_adversario = (pontos_j1, pontos_j2) if lado == "jogador1" else (pontos_j2, pontos_j1)
+        margem_ajustada = (pontos_lado - pontos_adversario) + linha
+        if margem_ajustada == 0:
+            return ResultadoAposta.VOID.value  # push: só acontece com handicap inteiro
+        return ResultadoAposta.GREEN.value if margem_ajustada > 0 else ResultadoAposta.RED.value
+
+    m = _PADRAO_TOTAL_PONTOS.match(mercado)
+    if m:
+        direcao = m.group(1).strip().lower()
+        try:
+            linha = float(m.group(2).replace(",", "."))
+        except ValueError:
+            return None
+        total = sum(h + a for h, a in evt.sets)
+        if total == linha:
+            return ResultadoAposta.VOID.value  # push: só acontece com linha inteira
+        acima = total > linha
+        quer_mais = direcao in ("mais", "over")
+        venceu = acima if quer_mais else not acima
+        return ResultadoAposta.GREEN.value if venceu else ResultadoAposta.RED.value
 
     return None

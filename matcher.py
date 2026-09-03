@@ -26,14 +26,14 @@ from typing import Optional
 
 from bookmakers import REGISTRY
 from config import settings
-from models import MatchInfo
+from models import Esporte, MatchInfo
 from nameutils import names_match, search_variants
 from sofascore_client import find_canonical_match, find_canonical_match_by_name
 
 logger = logging.getLogger(__name__)
 
 
-def buscar_confronto_na_superbet(nome: str) -> Optional[tuple[str, str]]:
+def buscar_confronto_na_superbet(nome: str, esporte: str = Esporte.TENIS.value) -> Optional[tuple[str, str]]:
     """Procura o confronto de `nome` na busca da Superbet, tentando o nome
     inteiro e depois só o sobrenome/primeiro nome (ver
     nameutils.search_variants). Devolve (jogador1, jogador2) do confronto
@@ -62,7 +62,7 @@ def buscar_confronto_na_superbet(nome: str) -> Optional[tuple[str, str]]:
 
     for variante in search_variants(nome):
         try:
-            confrontos = adapter.buscar_confrontos(variante)
+            confrontos = adapter.buscar_confrontos(variante, esporte)
         except Exception:
             logger.exception("Superbet: busca por %r falhou — seguindo sem validação cruzada.", variante)
             return None
@@ -125,6 +125,7 @@ def build_enabled_adapters():
 def find_match(
     jogador1: str,
     jogador2: Optional[str],
+    esporte: str = Esporte.TENIS.value,
     dias_de_busca: int = 3,
     referencia: Optional[datetime] = None,
 ) -> MatchInfo:
@@ -135,10 +136,10 @@ def find_match(
     resolvido consultando o SofaScore só pelo jogador1.
     """
     if not jogador1:
-        return MatchInfo(encontrado=False)
+        return MatchInfo(encontrado=False, esporte=esporte)
 
     if jogador2:
-        canonico = find_canonical_match(jogador1, jogador2, dias_de_busca=dias_de_busca, referencia=referencia)
+        canonico = find_canonical_match(jogador1, jogador2, esporte=esporte, dias_de_busca=dias_de_busca, referencia=referencia)
     else:
         # Só o favorito citado: aqui o SofaScore precisa adivinhar o
         # adversário, e é exatamente onde ele erra (nome com typo, jogador
@@ -147,18 +148,18 @@ def find_match(
         # resolve typo e perfil velho de uma vez; com o par em mãos, a
         # busca no SofaScore deixa de ser adivinhação e passa a ser
         # confirmação de um confronto específico.
-        par_superbet = buscar_confronto_na_superbet(jogador1)
+        par_superbet = buscar_confronto_na_superbet(jogador1, esporte)
         canonico = None
         if par_superbet:
             s1, s2 = par_superbet
-            canonico = find_canonical_match(s1, s2, dias_de_busca=dias_de_busca, referencia=referencia)
+            canonico = find_canonical_match(s1, s2, esporte=esporte, dias_de_busca=dias_de_busca, referencia=referencia)
             if canonico is None:
                 logger.info(
                     "Superbet achou %s x %s, mas o SofaScore não confirmou — "
                     "seguindo para a busca só por nome.", s1, s2,
                 )
         if canonico is None:
-            canonico = find_canonical_match_by_name(jogador1, referencia=referencia)
+            canonico = find_canonical_match_by_name(jogador1, esporte=esporte, referencia=referencia)
 
     # Nomes/torneio/hora "oficiais": usa o que o SofaScore confirmou, ou
     # cai para o que o OCR extraiu, se o SofaScore não achar nada.
@@ -175,7 +176,7 @@ def find_match(
     links: dict = {}
     for adapter in build_enabled_adapters():
         try:
-            link = adapter.get_link(j1, j2, torneio, data_hora)
+            link = adapter.get_link(j1, j2, torneio, data_hora, esporte)
         except Exception:
             logger.exception("Falha inesperada no adaptador %s — pulando essa casa.", adapter.slug)
             continue
@@ -192,4 +193,5 @@ def find_match(
         jogador2_oficial=j2,
         links=links,
         sofascore_event_id=canonico.sofascore_event_id if canonico else None,
+        esporte=esporte,
     )
