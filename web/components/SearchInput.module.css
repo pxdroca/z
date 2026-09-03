@@ -1,50 +1,90 @@
+/* Fechado: um botão quadrado (2.35rem) igual aos outros do header.
+   Aberto: cresce pra 15rem. A largura anima no wrapper, e o input em si
+   só aparece por opacidade — animar `width` do input daria um efeito de
+   texto "esticando" em vez de campo abrindo. */
 .wrapper {
   position: relative;
   display: flex;
   align-items: center;
-  width: 15rem;
+  width: 2.35rem;
+  height: 2.35rem;
+  flex-shrink: 0;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-top);
+  border-radius: var(--radius);
+  transition: width 0.28s var(--ease), background-color 0.18s var(--ease), border-color 0.18s var(--ease);
 }
 
-.icone {
+.wrapper:hover {
+  border-color: var(--glass-border-hover);
+}
+
+.wrapperAberto {
+  width: 15rem;
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
+}
+
+/* A lupa fica ancorada à esquerda e não se move durante a animação — é o
+   ponto fixo de onde o campo parece crescer. */
+.lupa {
   position: absolute;
-  left: 0.7rem;
+  left: 0;
   display: flex;
   align-items: center;
-  color: var(--text-muted);
-  pointer-events: none;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  flex-shrink: 0;
   transition: color 0.18s var(--ease);
+}
+
+.wrapper:hover .lupa {
+  color: var(--text);
+}
+
+.wrapperAberto .lupa {
+  color: var(--text-muted);
+  cursor: default;
 }
 
 .input {
   width: 100%;
-  height: 2.35rem;
-  padding: 0 2rem 0 2.1rem;
-  background: var(--surface);
-  backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur));
-  border: 1px solid var(--border);
+  height: 100%;
+  padding: 0 2rem 0 2.2rem;
+  background: transparent;
+  border: none;
   border-radius: var(--radius);
   color: var(--text);
+  font-family: inherit;
   font-size: 0.85rem;
-  transition: background-color 0.18s var(--ease), border-color 0.18s var(--ease);
+  /* Fechado: invisível e sem receber clique (o botão da lupa cobre a
+     área). O delay na abertura deixa a largura crescer antes do texto
+     aparecer, senão o placeholder "vaza" fora da caixa durante a
+     animação. */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s var(--ease);
+}
+
+.wrapperAberto .input {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.2s var(--ease) 0.1s;
 }
 
 .input::placeholder {
   color: var(--text-muted);
 }
 
-.input:hover {
-  border-color: var(--border-strong);
-}
-
 .input:focus {
   outline: none;
-  background: var(--surface-hover);
-  border-color: var(--border-hover);
-}
-
-.wrapper:focus-within .icone {
-  color: var(--text-secondary);
 }
 
 .limpar {
@@ -67,8 +107,25 @@
   background: var(--surface-hover);
 }
 
+/* Tablet: aberto, ocupa a linha inteira disponível. */
 @media (max-width: 900px) {
-  .wrapper {
+  .wrapperAberto {
     width: 100%;
+  }
+}
+
+/* Mobile: a busca vive dentro do dock flutuante, que tem largura própria.
+   Um width:100% aqui esticaria a barra inteira e empurraria os outros
+   botões pra fora — então volta a uma largura fixa que caiba no dock. */
+@media (max-width: 640px) {
+  .wrapperAberto {
+    width: 10.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wrapper,
+  .input {
+    transition: none;
   }
 }

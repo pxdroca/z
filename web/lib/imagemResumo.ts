@@ -4,6 +4,7 @@
 // não tem nenhuma lib de imagem (canvas/sharp/puppeteer) instalada, e
 // Canvas 2D nativo é suficiente pro layout simples de lista que precisamos.
 import { grupoDaBet, type GrupoId } from "./agrupamento";
+import { calcularEstatisticas } from "./estatisticas";
 import type { Bet } from "./types";
 
 const FUSO_PADRAO = "America/Sao_Paulo";
@@ -44,7 +45,11 @@ type CorGrupo = { texto: string; fundo: string; label: string };
 const COR_POR_GRUPO: Record<GrupoId, CorGrupo> = {
   green: { texto: "#34d399", fundo: "rgba(52, 211, 153, 0.14)", label: "GREEN" },
   red: { texto: "#f87171", fundo: "rgba(248, 113, 113, 0.14)", label: "RED" },
-  ao_vivo: { texto: "#f87171", fundo: "rgba(248, 113, 113, 0.14)", label: "AO VIVO" },
+  // Ao vivo em ÂMBAR, não no mesmo vermelho do red: na imagem os dois
+  // badges ficam um embaixo do outro e, na mesma cor, "ao vivo" era lido
+  // como aposta perdida. Âmbar também é o tom que o painel já usa pra
+  // pendente/em andamento, então não introduz cor nova no sistema.
+  ao_vivo: { texto: "#fbbf24", fundo: "rgba(251, 191, 36, 0.16)", label: "AO VIVO" },
   pendentes: { texto: "#9ca3af", fundo: "rgba(156, 163, 175, 0.12)", label: "PENDENTE" },
   void: { texto: "#9ca3af", fundo: "rgba(156, 163, 175, 0.12)", label: "VOID" },
 };
@@ -119,7 +124,78 @@ const LARGURA = 1080; // formato vertical estilo Stories — 1080 é a largura p
 const PAD = 56;
 const LINHA_ALTURA = 132;
 const HEADER_ALTURA = 220;
+/** Faixa de estatísticas entre o header e a lista. */
+const STATS_ALTURA = 150;
 const FOOTER_ALTURA = 90;
+
+/**
+ * Desenha a faixa de estatísticas do dia (green, red, unidades, taxa de
+ * acerto) logo abaixo do título.
+ *
+ * As unidades trazem o ROI como linha secundária, no lugar de virar um 5º
+ * card: são a mesma informação (retorno) em unidades e em %, e 4 colunas
+ * em 1080px deixam cada número com folga pra ser lido de longe — com 5 o
+ * texto começaria a apertar.
+ *
+ * Os números vêm de calcularEstatisticas, o MESMO cálculo dos cards do
+ * painel, pra imagem e tela nunca divergirem.
+ */
+function desenharEstatisticas(ctx: CanvasRenderingContext2D, jogos: Bet[], y: number): void {
+  const stats = calcularEstatisticas(jogos);
+
+  const colunas: { label: string; valor: string; sub: string | null; cor: string }[] = [
+    { label: "GREEN", valor: String(stats.green), sub: null, cor: "#34d399" },
+    { label: "RED", valor: String(stats.red), sub: null, cor: "#f87171" },
+    {
+      label: "UNIDADES",
+      valor: `${stats.unidadesLiquidas >= 0 ? "+" : ""}${stats.unidadesLiquidas.toFixed(2)}u`,
+      sub: stats.roi !== null ? `ROI ${stats.roi.toFixed(1)}%` : null,
+      cor: stats.unidadesLiquidas >= 0 ? "#34d399" : "#f87171",
+    },
+    {
+      label: "TAXA DE ACERTO",
+      valor: stats.taxaAcerto !== null ? `${stats.taxaAcerto.toFixed(0)}%` : "—",
+      sub: stats.green + stats.red > 0 ? `${stats.green}/${stats.green + stats.red}` : null,
+      cor: "#a78bfa",
+    },
+  ];
+
+  const larguraUtil = LARGURA - PAD * 2;
+  const larguraCol = larguraUtil / colunas.length;
+  const alturaCaixa = STATS_ALTURA - 34;
+
+  colunas.forEach((col, i) => {
+    const x = PAD + i * larguraCol;
+    const cx = x + larguraCol / 2;
+
+    // Cartão de vidro escuro, com um fio da cor de acento no topo — o
+    // mesmo vocabulário dos cards de métrica do painel.
+    ctx.fillStyle = "rgba(255,255,255,0.038)";
+    roundRect(ctx, x + 6, y, larguraCol - 12, alturaCaixa, 18);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.07)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+
+    ctx.fillStyle = "#6b7280";
+    ctx.font = "700 19px Inter, sans-serif";
+    ctx.fillText(col.label, cx, y + 34);
+
+    ctx.fillStyle = col.cor;
+    ctx.font = "800 44px Inter, sans-serif";
+    ctx.fillText(col.valor, cx, y + 84);
+
+    if (col.sub) {
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "500 20px Inter, sans-serif";
+      ctx.fillText(col.sub, cx, y + 108);
+    }
+  });
+
+  ctx.textAlign = "left";
+}
 
 /** Desenha o resumo do dia num canvas novo e devolve o elemento pronto
  *  (o chamador decide o que fazer com ele: preview, toBlob, download). */
@@ -129,7 +205,8 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
   // poucos jogos a lista sozinha não preenche o suficiente pra imagem
   // parecer vertical; o espaço sobrando fica como respiro abaixo do rodapé
   // em vez de deixar a imagem quase quadrada.
-  const alturaConteudo = HEADER_ALTURA + Math.max(jogos.length, 1) * LINHA_ALTURA + FOOTER_ALTURA;
+  const alturaConteudo =
+    HEADER_ALTURA + STATS_ALTURA + Math.max(jogos.length, 1) * LINHA_ALTURA + FOOTER_ALTURA;
   const alturaMinimaRetrato = Math.round((LARGURA * 16) / 9);
   const altura = Math.max(alturaConteudo, alturaMinimaRetrato);
 
@@ -169,24 +246,30 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
   const dataCapitalizada = hojeLabel.charAt(0).toUpperCase() + hojeLabel.slice(1);
   ctx.fillText(dataCapitalizada, PAD, 178);
 
+  // --- faixa de estatísticas (logo abaixo do título) ---
+  desenharEstatisticas(ctx, jogos, HEADER_ALTURA - 24);
+
+  // Início da lista, já descontando a faixa de estatísticas.
+  const listaY = HEADER_ALTURA + STATS_ALTURA;
+
   ctx.strokeStyle = "rgba(255,255,255,0.08)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(PAD, HEADER_ALTURA - 8);
-  ctx.lineTo(LARGURA - PAD, HEADER_ALTURA - 8);
+  ctx.moveTo(PAD, listaY - 8);
+  ctx.lineTo(LARGURA - PAD, listaY - 8);
   ctx.stroke();
 
   if (jogos.length === 0) {
     ctx.fillStyle = "#6b7280";
     ctx.font = "500 28px Inter, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Nenhum jogo hoje.", LARGURA / 2, HEADER_ALTURA + LINHA_ALTURA / 2);
+    ctx.fillText("Nenhum jogo hoje.", LARGURA / 2, listaY + LINHA_ALTURA / 2);
     ctx.textAlign = "left";
   }
 
   // --- linhas, 1 por jogo ---
   jogos.forEach((bet, i) => {
-    const y = HEADER_ALTURA + i * LINHA_ALTURA;
+    const y = listaY + i * LINHA_ALTURA;
     const grupo = grupoDaBet(bet);
     const cor = COR_POR_GRUPO[grupo];
 
@@ -213,10 +296,12 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
     const larguraBadge = 190;
     const larguraTexto = LARGURA - PAD - xTexto - larguraBadge - 24;
 
-    // horário
-    ctx.fillStyle = "#6b7280";
-    ctx.font = "600 22px 'JetBrains Mono', monospace";
-    ctx.fillText(bet.data_hora ? formatarHora(bet.data_hora) : "--:--", xTexto, cyCentro - 26);
+    // horário — 30px (era 22) e em text-secondary (era muted): é a
+    // primeira coisa que se procura na imagem ("que jogo é agora?") e
+    // ficava menor E mais apagado que o mercado, que é secundário.
+    ctx.fillStyle = "#a1a7b3";
+    ctx.font = "700 30px 'JetBrains Mono', monospace";
+    ctx.fillText(bet.data_hora ? formatarHora(bet.data_hora) : "--:--", xTexto, cyCentro - 24);
 
     // confronto (jogo)
     ctx.fillStyle = "#eceef1";
@@ -263,18 +348,21 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
   ctx.lineTo(LARGURA - PAD, altura - FOOTER_ALTURA);
   ctx.stroke();
 
-  const nGreen = jogos.filter((b) => grupoDaBet(b) === "green").length;
-  const nRed = jogos.filter((b) => grupoDaBet(b) === "red").length;
-  const nPendente = jogos.length - nGreen - nRed;
+  // Green/red agora vivem na faixa de estatísticas do topo; repetir aqui
+  // seria a mesma contagem duas vezes na mesma imagem. O rodapé fica com
+  // o que o topo não diz: quantos jogos a lista tem e quantos ainda estão
+  // em aberto.
+  const nAoVivo = jogos.filter((b) => grupoDaBet(b) === "ao_vivo").length;
+  const nPendente = jogos.filter((b) => grupoDaBet(b) === "pendentes").length;
+
+  const partes: string[] = [`${jogos.length} ${jogos.length === 1 ? "jogo" : "jogos"}`];
+  if (nAoVivo > 0) partes.push(`${nAoVivo} ao vivo`);
+  if (nPendente > 0) partes.push(`${nPendente} em aberto`);
 
   ctx.font = "600 26px Inter, sans-serif";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#34d399";
-  ctx.fillText(`${nGreen} green`, PAD, footerY);
-  ctx.fillStyle = "#f87171";
-  ctx.fillText(`${nRed} red`, PAD + 150, footerY);
-  ctx.fillStyle = "#9ca3af";
-  ctx.fillText(`${nPendente} pendente`, PAD + 280, footerY);
+  ctx.fillStyle = "#6b7280";
+  ctx.fillText(partes.join("  ·  "), PAD, footerY);
   ctx.textBaseline = "alphabetic";
 
   return canvas;

@@ -43,9 +43,13 @@ export function FilterPopover({ filtro, onChange }: { filtro: Filtro; onChange: 
         className={aberto ? `${styles.trigger} ${styles.triggerAberto}` : styles.trigger}
         onClick={() => setAberto((v) => !v)}
         aria-expanded={aberto}
+        aria-label="Filtros"
       >
-        <FilterIcon size={14} />
-        Filtros
+        <FilterIcon size={15} />
+        {/* Rótulo e chevron somem no mobile (ver CSS): lá o botão vive no
+            dock flutuante, onde precisa ser quadrado como os vizinhos —
+            com texto, ele sozinho ocupava metade da barra. */}
+        <span className={styles.rotulo}>Filtros</span>
         <span className={aberto ? `${styles.chevron} ${styles.chevronAberto}` : styles.chevron}>
           <ChevronDownIcon size={13} />
         </span>

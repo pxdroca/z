@@ -6,6 +6,7 @@ import {
   RESULTADO_APOSTA_VALUES,
   type BetStatus,
   type Esporte,
+  STATUS_VISIVEIS,
   type ResultadoAposta,
 } from "@/lib/types";
 
@@ -13,9 +14,13 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
   const statusParam = searchParams.getAll("status");
-  const status: BetStatus[] = statusParam.filter((s): s is BetStatus =>
+  const pedidos: BetStatus[] = statusParam.filter((s): s is BetStatus =>
     (BET_STATUS_VALUES as readonly string[]).includes(s)
   );
+  // Sem status na query, lista os visíveis (não a tabela inteira): assim
+  // erro_extracao — mensagens que não eram tip — nunca aparece por
+  // omissão do cliente, e não só quando a página lembra de filtrar.
+  const status: BetStatus[] = pedidos.length > 0 ? pedidos : STATUS_VISIVEIS;
 
   const dateFrom = searchParams.get("from") ?? undefined;
   const dateTo = searchParams.get("to") ?? undefined;
@@ -56,12 +61,13 @@ export async function POST(request: NextRequest) {
   }
 
   const jogador1 = textoOpcional(body.jogador1);
-  if (!jogador1) {
-    return NextResponse.json({ error: "Informe pelo menos o jogador/time 1." }, { status: 400 });
+  const jogador2 = textoOpcional(body.jogador2);
+  // Os dois são obrigatórios numa aposta lançada à mão: quem digita sabe o
+  // confronto. O "?" existe só pro caminho automático, quando o tipster
+  // cita apenas o favorito e o SofaScore não confirma o adversário.
+  if (!jogador1 || !jogador2) {
+    return NextResponse.json({ error: "Informe os dois jogadores/times." }, { status: 400 });
   }
-  // "?" é o mesmo placeholder que o listener.py usa quando o tipster cita
-  // só o favorito (a coluna é NOT NULL), então o painel exibe igual.
-  const jogador2 = textoOpcional(body.jogador2) ?? "?";
 
   let odd: number | null = null;
   if (body.odd !== undefined && body.odd !== null && body.odd !== "") {

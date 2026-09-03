@@ -11,6 +11,17 @@ export const BET_STATUS_VALUES = [
 ] as const;
 export type BetStatus = (typeof BET_STATUS_VALUES)[number];
 
+/**
+ * Status que aparecem no painel.
+ *
+ * "erro_extracao" fica de fora: são mensagens do grupo que não eram tip
+ * nenhuma (comentário do tipster, link, "Ao vivo!", "Apostas em aberto
+ * estão fixadas"). O listener as grava com jogador "?" só pra auditoria e
+ * pra não reprocessar a mesma mensagem — não informam nada ao usuário e
+ * só poluíam a tela. Continuam no banco, apenas não são listadas.
+ */
+export const STATUS_VISIVEIS: BetStatus[] = ["nao_encontrada", "agendada", "ao_vivo", "encerrada"];
+
 export const RESULTADO_APOSTA_VALUES = [
   "pendente",
   "green",

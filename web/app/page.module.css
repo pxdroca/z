@@ -225,9 +225,70 @@
   }
 }
 
+/* --- Dock flutuante (mobile) -----------------------------------------
+   No mobile as ações saem do topo e viram uma barra flutuante embaixo,
+   no estilo do dock/tab bar do iOS: fica no alcance do polegar e não
+   rouba altura do conteúdo. É só reposicionamento — os mesmos botões,
+   na mesma ordem, sem componente novo.
+
+   A barra é a única superfície de vidro nessa camada: seguindo a
+   orientação da Apple de não empilhar vidro sobre vidro, os botões
+   dentro dela ficam transparentes (cada um já traz o próprio fundo de
+   vidro, que aqui é neutralizado). */
+@media (max-width: 640px) {
+  .headerAcoes {
+    position: fixed;
+    left: 50%;
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    z-index: 40;
+    width: auto;
+    max-width: calc(100vw - 2rem);
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.4rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    border-top-color: var(--glass-top);
+    border-radius: var(--radius-full);
+    box-shadow: var(--glass-shadow), var(--glass-inset);
+  }
+
+  /* Vidro sobre vidro: tudo dentro do dock perde fundo/borda próprios e a
+     barra passa a ser a única superfície do conjunto. Precisa ser
+     DESCENDENTE (não filho direto): o botão de Filtros vive dentro de um
+     wrapper, então `> *` não o alcançava e ele ficava com a própria
+     cápsula desenhada por cima do vidro do dock. */
+  .headerAcoes > *,
+  .headerAcoes button,
+  .headerAcoes > div {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Exceção: a busca ABERTA precisa de um fundo próprio pra o campo de
+     texto se distinguir do resto do dock. */
+  .headerAcoes > div[class*="wrapperAberto"] {
+    background: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .headerAcoes {
+      background: var(--surface-solid);
+    }
+  }
+}
+
 @media (max-width: 640px) {
   .container {
     padding: 1.25rem 1rem 3rem;
+    /* Espaço pro dock flutuante não cobrir o último card. */
+    padding-bottom: 6.5rem;
   }
   .appHeader {
     font-size: 1.4rem;

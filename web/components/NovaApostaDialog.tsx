@@ -56,8 +56,8 @@ export function NovaApostaDialog({ onCriada }: { onCriada: () => void }) {
   }
 
   async function salvar() {
-    if (!jogador1.trim()) {
-      setErro("Informe pelo menos o jogador/time 1.");
+    if (!jogador1.trim() || !jogador2.trim()) {
+      setErro("Informe os dois jogadores/times.");
       return;
     }
     setSalvando(true);
@@ -154,7 +154,9 @@ export function NovaApostaDialog({ onCriada }: { onCriada: () => void }) {
                 />
               </label>
 
-              <label className={`${styles.campo} ${styles.campoLargo}`}>
+              {/* Os dois jogadores dividem a linha: são campos irmãos e
+                  ficavam ocupando duas linhas inteiras sem precisar. */}
+              <label className={styles.campo}>
                 <span className={styles.label}>
                   {esporte === "basquete" ? "Time 1" : "Jogador 1"} *
                 </span>
@@ -162,19 +164,19 @@ export function NovaApostaDialog({ onCriada }: { onCriada: () => void }) {
                   className={styles.input}
                   value={jogador1}
                   onChange={(e) => setJogador1(e.target.value)}
-                  placeholder={esporte === "basquete" ? "Illawarra Hawks" : "Nome do jogador"}
+                  placeholder={esporte === "basquete" ? "Illawarra Hawks" : "Sinner"}
                 />
               </label>
 
-              <label className={`${styles.campo} ${styles.campoLargo}`}>
+              <label className={styles.campo}>
                 <span className={styles.label}>
-                  {esporte === "basquete" ? "Time 2" : "Jogador 2"}
+                  {esporte === "basquete" ? "Time 2" : "Jogador 2"} *
                 </span>
                 <input
                   className={styles.input}
                   value={jogador2}
                   onChange={(e) => setJogador2(e.target.value)}
-                  placeholder={esporte === "basquete" ? "Adelaide 36ers" : "Adversário (opcional)"}
+                  placeholder={esporte === "basquete" ? "Adelaide 36ers" : "Alcaraz"}
                 />
               </label>
 
@@ -184,17 +186,9 @@ export function NovaApostaDialog({ onCriada }: { onCriada: () => void }) {
                   className={styles.input}
                   value={mercado}
                   onChange={(e) => setMercado(e.target.value)}
-                  placeholder="Mais de 198.5 pontos"
-                />
-              </label>
-
-              <label className={`${styles.campo} ${styles.campoLargo}`}>
-                <span className={styles.label}>Torneio</span>
-                <input
-                  className={styles.input}
-                  value={torneio}
-                  onChange={(e) => setTorneio(e.target.value)}
-                  placeholder="NBL Blitz (pré-temporada)"
+                  placeholder={
+                    esporte === "basquete" ? "Mais de 198.5 pontos" : "Sinner vencer a partida"
+                  }
                 />
               </label>
 
@@ -220,7 +214,17 @@ export function NovaApostaDialog({ onCriada }: { onCriada: () => void }) {
                 />
               </label>
 
-              <label className={`${styles.campo} ${styles.campoLargo}`}>
+              <label className={styles.campo}>
+                <span className={styles.label}>Torneio</span>
+                <input
+                  className={styles.input}
+                  value={torneio}
+                  onChange={(e) => setTorneio(e.target.value)}
+                  placeholder={esporte === "basquete" ? "NBL" : "ATP - US Open"}
+                />
+              </label>
+
+              <label className={styles.campo}>
                 <span className={styles.label}>Resultado</span>
                 <select
                   className={styles.input}

@@ -13,7 +13,7 @@ import { agruparBets, contarPorGrupo, GRUPO_LABEL, GRUPO_VAZIO } from "@/lib/agr
 import { filtrarPorBusca } from "@/lib/busca";
 import { calcularEstatisticas, calcularOddMedia, calcularSeries } from "@/lib/estatisticas";
 import { PRIORIDADE_STATUS } from "@/lib/labels";
-import type { Bet, BetStatus, ResultadoAposta } from "@/lib/types";
+import { STATUS_VISIVEIS, type Bet, type BetStatus, type ResultadoAposta } from "@/lib/types";
 import styles from "./page.module.css";
 
 // "Hoje" no filtro padrão precisa ser o dia no horário de Brasília, não em
@@ -49,7 +49,12 @@ function filtroPadrao(): Filtro {
   const ate = new Date(hoje);
   ate.setDate(ate.getDate() + 14);
   return {
-    status: ["agendada", "ao_vivo", "encerrada"],
+    // Tudo menos erro_extracao. "nao_encontrada" ENTRA: é uma aposta real
+    // que o pipeline só não conseguiu casar com um jogo (liga fora do
+    // SofaScore, nome truncado pelo OCR) — sem ela no filtro padrão, uma
+    // aposta lançada à mão pelo painel ficava invisível, que foi o que
+    // aconteceu com a de basquete (#64).
+    status: STATUS_VISIVEIS,
     from: formatarDataInput(hoje),
     to: formatarDataInput(ate),
   };

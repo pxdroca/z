@@ -52,6 +52,18 @@
   }
 }
 
+/* Variante pro mobile, onde o painel abre a partir do dock (de baixo). */
+@keyframes panel-in-baixo {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .panel {
   position: absolute;
   top: calc(100% + 0.5rem);
@@ -148,18 +160,37 @@
 }
 
 @media (max-width: 640px) {
-  /* No mobile o wrapper não fica colado na borda direita real da viewport
-     (o container tem padding próprio), então "right: 0" relativo a ele
-     deslocaria o painel pra fora da tela. position:fixed com left/right
-     fixos resolve sem precisar calcular a posição do trigger via JS. */
+  /* No mobile o botão vive no dock flutuante embaixo, então o painel abre
+     PRA CIMA a partir dele (antes abria no topo da tela, onde o botão
+     ficava). position:fixed com left/right fixos evita calcular a posição
+     do trigger via JS — o wrapper não está colado na borda da viewport. */
   .panel {
     position: fixed;
-    top: 8.5rem;
+    top: auto;
+    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
     left: 1rem;
     right: 1rem;
     width: auto;
     max-width: none;
-    max-height: calc(100vh - 10rem);
+    max-height: calc(100vh - 12rem);
     overflow-y: auto;
+  }
+
+  /* Abre subindo (o painel nasce no dock, embaixo) em vez de descendo. */
+  .panel {
+    animation-name: panel-in-baixo;
+    transform-origin: bottom center;
+  }
+
+  /* Só o ícone no dock — ver comentário no TSX. */
+  .trigger {
+    width: 2.35rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .rotulo,
+  .chevron {
+    display: none;
   }
 }
