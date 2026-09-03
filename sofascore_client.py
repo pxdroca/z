@@ -44,7 +44,7 @@ import logging
 import random
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from playwright.sync_api import Page, sync_playwright
@@ -64,6 +64,20 @@ _USER_AGENT = (
 # Cache simples em memória por processo: evita bater várias vezes na mesma
 # data quando várias tips do mesmo dia chegam em sequência.
 _cache: dict[str, list[dict]] = {}
+
+# Janela máxima entre o jogo devolvido pelo SofaScore e o momento da tip,
+# usada em find_canonical_match_by_name. Bug real (03/09/2026): sem esse
+# limite, "Alexandra muller" casou com uma dupla feminina de JUNHO DE 2021
+# e "Hara friend" com uma dupla de julho/2026 — o endpoint
+# /team/{id}/featured-event devolve o último jogo conhecido do jogador,
+# que para quem não tem jogo agendado é um jogo antigo qualquer. Como o
+# código só escolhia o candidato "mais próximo" sem piso de qualidade,
+# aceitava esse lixo e gravava a aposta no confronto errado.
+#
+# 36h cobre o caso real de uso (o tipster manda tips de hoje e de amanhã
+# de manhã, ver mensagens 122/123 do grupo) com folga pra fuso horário,
+# sem chegar perto de pegar um jogo de outra semana.
+_JANELA_MAX_POR_NOME = timedelta(hours=36)
 
 
 @dataclass
@@ -195,7 +209,15 @@ def _extract_event(evt: dict) -> Optional[CanonicalMatch]:
     ts = evt.get("startTimestamp")
     if ts:
         try:
-            data_hora = datetime.fromtimestamp(int(ts))
+            # startTimestamp é epoch UTC. `fromtimestamp(ts)` sem tz converte
+            # pro fuso da MÁQUINA que está rodando — bug real (03/09/2026): o
+            # mesmo jogo virava 08:00 processado no PC local (UTC-3) e 11:00
+            # no runner do GitHub Actions (UTC), e como o horário ia ingênuo
+            # pro TIMESTAMPTZ do Postgres, apostas com jogo só de manhã eram
+            # promovidas a "ao_vivo" na hora. Fixar em UTC aqui mantém o
+            # instante correto independente de onde o pipeline roda; a
+            # exibição em horário de Brasília fica com quem apresenta.
+            data_hora = datetime.fromtimestamp(int(ts), tz=timezone.utc)
         except (ValueError, TypeError, OSError):
             data_hora = None
 
@@ -250,7 +272,9 @@ def find_canonical_match(
     se não encontrar — o chamador (matcher.py) decide o que fazer (ex: cair
     para os dados crus do OCR).
     """
-    referencia = referencia or datetime.now()
+    # Aware (UTC) pra manter a aritmética de datas consistente com o
+    # data_hora dos candidatos, que agora também é aware — ver _extract_event.
+    referencia = referencia or datetime.now(timezone.utc)
     threshold = settings.SUPERBET_FUZZY_THRESHOLD  # mesmo limiar usado nas casas de apostas
 
     def _buscar(page: Page) -> Optional[CanonicalMatch]:
@@ -298,7 +322,9 @@ def find_canonical_match_by_name(
     (agora, por padrão) — jogos muito no passado ou muito no futuro (torneio
     diferente, mesmo nome de outro jogador) são descartados.
     """
-    referencia = referencia or datetime.now()
+    # Aware (UTC): o data_hora dos candidatos é aware desde _extract_event,
+    # e subtrair aware de ingênuo é TypeError.
+    referencia = referencia or datetime.now(timezone.utc)
 
     def _buscar(page: Page) -> Optional[CanonicalMatch]:
         search_url = f"{SOFASCORE_BASE_URL}/search/all?q={jogador}"
@@ -331,6 +357,20 @@ def find_canonical_match_by_name(
             if not candidato or not candidato.data_hora:
                 continue
             diferenca = abs((candidato.data_hora - referencia).total_seconds())
+            # Piso de qualidade: featured-event devolve o último jogo
+            # conhecido do jogador, então um jogador sem jogo agendado
+            # traz um confronto antigo. Sem esse corte, "o mais próximo"
+            # vira "o menos absurdo" e a aposta é gravada no jogo errado
+            # (ver _JANELA_MAX_POR_NOME).
+            if diferenca > _JANELA_MAX_POR_NOME.total_seconds():
+                logger.info(
+                    "SofaScore: descartando %s x %s (%s) para '%s' — %.1f dias "
+                    "de distância da tip, fora da janela de %s.",
+                    candidato.jogador1_oficial, candidato.jogador2_oficial,
+                    candidato.data_hora, jogador,
+                    diferenca / 86400, _JANELA_MAX_POR_NOME,
+                )
+                continue
             if menor_diferenca is None or diferenca < menor_diferenca:
                 menor_diferenca = diferenca
                 melhor = candidato

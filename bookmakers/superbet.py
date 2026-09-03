@@ -43,6 +43,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 from urllib.parse import quote, urljoin
+from zoneinfo import ZoneInfo
 
 from config import settings
 from nameutils import pair_matches
@@ -85,9 +86,24 @@ def _day_param(offset: int) -> Optional[str]:
 
 
 def _offset_days(data_hora: Optional[datetime]) -> int:
+    """Quantos dias à frente de hoje está o jogo — vira a aba hoje/amanhã do
+    site da Superbet.
+
+    Os dois lados da conta são convertidos para o fuso local configurado: o
+    data_hora do SofaScore é timezone-aware em UTC, e o site da Superbet
+    mostra o dia em horário de Brasília. Comparar a data UTC com a data
+    local erra o offset na janela entre 21:00 e 00:00 local (já é o dia
+    seguinte em UTC), mandando a busca pra aba do dia errado.
+    """
     if not data_hora:
         return 0
-    return (data_hora.date() - datetime.now().date()).days
+    fuso = ZoneInfo(settings.TIMEZONE)
+    hoje_local = datetime.now(fuso).date()
+    if data_hora.tzinfo is None:
+        dia_jogo = data_hora.date()
+    else:
+        dia_jogo = data_hora.astimezone(fuso).date()
+    return (dia_jogo - hoje_local).days
 
 
 def _parse_match_time(texto: str, referencia: datetime) -> Optional[datetime]:

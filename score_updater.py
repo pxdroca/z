@@ -1,7 +1,7 @@
 """
 score_updater.py
 =================
-Processo separado (rode em paralelo ao listener.py e ao streamlit) que
+Processo separado (rode em paralelo ao listener.py) que
 acompanha o placar/resultado ao vivo das apostas já confirmadas no
 SofaScore, usando o sofascore_event_id salvo por listener.py/matcher.py.
 
@@ -40,7 +40,7 @@ import logging
 import random
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import resultado_checker
@@ -200,7 +200,10 @@ def _retentar_bet_nao_encontrada(bet: Bet) -> None:
         logger.debug("Aposta #%s: ainda não encontrada (%s x %s)", bet.id, bet.jogador1, bet.jogador2)
         return
 
-    status = BetStatus.AO_VIVO.value if (match.data_hora and match.data_hora <= datetime.now()) else BetStatus.AGENDADA.value
+    # datetime.now(timezone.utc): match.data_hora vem aware (UTC) do
+    # SofaScore — comparar com um now() ingênuo é TypeError.
+    agora = datetime.now(timezone.utc)
+    status = BetStatus.AO_VIVO.value if (match.data_hora and match.data_hora <= agora) else BetStatus.AGENDADA.value
     update_match_info(
         bet.id,
         data_hora=match.data_hora,

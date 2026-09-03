@@ -52,6 +52,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # O console do Windows normalmente usa uma codepage legada (cp1252) que não
@@ -86,6 +87,14 @@ from notifier import send_bet_notification, send_plain_message
 # processou — necessário porque o runner do GitHub Actions não tem disco
 # persistente entre execuções (ver poll_new_messages()).
 _SYNC_STATE_KEY = "listener_last_message_id"
+
+# Quanto de histórico o primeiro poll de um chat novo aceita processar.
+# Como o grupo é recriado todo dia, "chat novo" é rotina, não exceção — a
+# janela precisa cobrir as tips que o tipster já postou antes do primeiro
+# poll do dia (ele costuma mandar as bets de madrugada, ver mensagens
+# 98-103 de 03/09/2026), sem abrir a porta pra reprocessar um grupo antigo
+# inteiro caso TELEGRAM_SOURCE_CHAT aponte pra outro lugar.
+_JANELA_PRIMEIRO_POLL = timedelta(hours=12)
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
@@ -424,12 +433,34 @@ async def poll_new_messages() -> None:
         mensagens = []
         async for message in client.iter_messages(source_chat, min_id=min_id):
             mensagens.append(message)
-        # iter_messages devolve do mais novo pro mais antigo — processa na
-        # ordem cronológica real, e min_id=0 na 1ª execução processaria o
-        # histórico inteiro, então nesse caso só pega a mais recente (não
-        # queremos backfill automático surpresa; use --backfill pra isso).
+
+        # min_id=0 = primeira execução NESTE chat. Não dá pra processar o
+        # histórico inteiro (backfill surpresa de um grupo antigo), mas
+        # também não dá pra pegar só a última mensagem: como o grupo é
+        # recriado todo dia (ver docstring), "primeira execução" acontece
+        # TODO DIA, e o corte em [:1] descartava tudo que o tipster já
+        # tinha postado antes do primeiro poll do grupo novo.
+        #
+        # Bug real (03/09/2026): 6 tips (msgs 98-103, 01:47-01:53) foram
+        # perdidas silenciosamente porque no primeiro poll do grupo de hoje
+        # a mensagem mais recente era um comentário solto (id 124) — as
+        # apostas ficaram "atrás" dela e nunca foram vistas. Tiveram que
+        # ser reprocessadas à mão.
+        #
+        # Janela de tempo em vez de contagem: pega o que é plausivelmente
+        # "do dia corrente" e ignora histórico antigo de verdade.
         if min_id == 0 and mensagens:
-            mensagens = mensagens[:1]
+            limite = datetime.now(timezone.utc) - _JANELA_PRIMEIRO_POLL
+            recentes = [m for m in mensagens if m.date and m.date >= limite]
+            logger.info(
+                "Primeiro poll em %s: %d de %d mensagem(ns) dentro da janela de %s.",
+                getattr(source_chat, "title", ""), len(recentes), len(mensagens),
+                _JANELA_PRIMEIRO_POLL,
+            )
+            mensagens = recentes
+
+        # iter_messages devolve do mais novo pro mais antigo — processa na
+        # ordem cronológica real.
         mensagens.reverse()
 
         logger.info(
