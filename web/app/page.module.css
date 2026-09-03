@@ -1,45 +1,177 @@
 .container {
-  max-width: 1400px;
+  position: relative;
+  z-index: 1;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 1.5rem 2rem 3rem;
+  padding: 1.75rem 1.75rem 4rem;
 }
 
-.headerRow {
-  display: grid;
-  grid-template-columns: 5fr 1fr;
-  gap: 1rem;
-  align-items: center;
-  margin-bottom: 0.5rem;
+/* --- Header --------------------------------------------------------- */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.75rem;
+}
+
+.headerTitulo {
+  min-width: 0;
 }
 
 .appHeader {
-  font-family: "Archivo", sans-serif;
-  font-weight: 800;
-  font-size: 2.1rem;
-  letter-spacing: -0.02em;
+  font-family: inherit;
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
 }
 
-.secaoStatus {
+.subtitulo {
   display: flex;
   align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.separador {
+  width: 3px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
+.atualizado {
+  display: inline-flex;
+  align-items: center;
   gap: 0.4rem;
-  font-family: "Archivo", sans-serif;
-  font-weight: 700;
-  font-size: 1.05rem;
-  margin: 1.4rem 0 0.7rem;
 }
 
-.secaoStatusCount {
-  font-family: "JetBrains Mono", monospace;
-  font-weight: 500;
-  color: var(--muted);
-  font-size: 0.9rem;
+.pontoVivo {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
 }
 
+.headerAcoes {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.refreshButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  background: var(--surface);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: background-color 0.18s var(--ease), border-color 0.18s var(--ease), color 0.18s var(--ease);
+}
+
+.refreshButton:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Gira só enquanto está carregando — feedback de que a ação aconteceu. */
+.refreshGirando {
+  display: flex;
+  animation: girar 0.9s linear infinite;
+}
+
+/* --- Seções por grupo ------------------------------------------------ */
+
+.secao {
+  margin-bottom: 2rem;
+}
+
+.secaoHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.secaoDot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.dot_ao_vivo {
+  background: var(--red);
+}
+.dot_green {
+  background: var(--green);
+}
+.dot_red {
+  background: var(--red);
+}
+.dot_pendentes {
+  background: var(--amber);
+}
+.dot_void {
+  background: var(--neutral);
+}
+
+.secaoTitulo {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.secaoCount {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* Estado vazio: área extremamente discreta, como pedido. */
+.secaoVazia {
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.018);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* --- Grid dos cards --------------------------------------------------
+   3 colunas em telas largas, 2 em médias, 1 no mobile. auto-rows: 1fr
+   iguala a altura dos cards da mesma linha (alinhamento consistente
+   mesmo com conteúdo de tamanhos diferentes). */
 .cardsGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.2rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 1rem;
 }
 
 @keyframes card-fade-in {
@@ -53,75 +185,58 @@
   }
 }
 
-/* Entrada suave e escalonada dos cards quando a lista carrega, em vez de
-   aparecer tudo de uma vez ("pop") — refinamento visual pedido pelo
-   usuário. nth-child cobre só os primeiros (o delay pra além disso vira
-   imperceptível/desnecessário). */
 .cardsGrid > * {
-  animation: card-fade-in 0.3s ease-out backwards;
+  animation: card-fade-in 0.28s var(--ease) backwards;
 }
 .cardsGrid > *:nth-child(1) {
   animation-delay: 0s;
 }
 .cardsGrid > *:nth-child(2) {
-  animation-delay: 0.04s;
+  animation-delay: 0.03s;
 }
 .cardsGrid > *:nth-child(3) {
-  animation-delay: 0.08s;
+  animation-delay: 0.06s;
 }
-.cardsGrid > *:nth-child(4) {
-  animation-delay: 0.12s;
-}
-.cardsGrid > *:nth-child(n + 5) {
-  animation-delay: 0.16s;
+.cardsGrid > *:nth-child(n + 4) {
+  animation-delay: 0.09s;
 }
 
-.emptyState {
-  color: var(--muted);
-  padding: 2rem 0;
+.aviso {
+  padding: 2.5rem 1rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  text-align: center;
 }
 
-.loadingState {
-  color: var(--muted);
-  padding: 2rem 0;
+@media (max-width: 1280px) {
+  .cardsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .cardsGrid > * {
-    animation: none;
+@media (max-width: 900px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  .headerAcoes {
+    width: 100%;
   }
 }
 
 @media (max-width: 640px) {
   .container {
-    padding: 0.75rem 1rem 2rem;
+    padding: 1.25rem 1rem 3rem;
   }
-
-  /* Pedido do usuário: título centralizado e mais pra cima no mobile,
-     pra não ficar grudado no botão de Filtros — em vez da mesma linha
-     lado a lado do desktop, empilha com o título primeiro. */
-  .headerRow {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
-    margin-top: -0.5rem;
-    margin-bottom: 0.75rem;
-    gap: 0.6rem;
-  }
-
   .appHeader {
-    font-size: 1.6rem;
+    font-size: 1.4rem;
   }
-
   .cardsGrid {
     grid-template-columns: 1fr;
-    gap: 1.4rem;
+    grid-auto-rows: auto;
   }
-
-  /* Mais respiro antes de cada seção de status e entre os cards — pedido
-     do usuário ("tudo muito junto" no mobile), agora com mais liberdade
-     pra ajustar espaçamento livremente. */
-  .secaoStatus {
-    margin: 2rem 0 1rem;
+  .secao {
+    margin-bottom: 1.75rem;
   }
 }

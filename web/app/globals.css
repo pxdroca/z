@@ -1,19 +1,68 @@
-/* Tema portado de .streamlit/config.toml + app.py::_inject_css — mesma
-   paleta escura, mesmo verde-limão de destaque, já validados visualmente
-   na versão Streamlit. Cores fixas (não depende de prefers-color-scheme):
-   este painel é deliberadamente dark-only, não segue o tema do sistema. */
-@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap");
+/* Sistema de design — dark premium (estética SaaS/analytics: Linear,
+   Vercel, Stripe). Dark-only por decisão de produto (não segue
+   prefers-color-scheme). Tokens centralizados aqui; os componentes só
+   consomem as variáveis, nunca valores literais de cor. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap");
 
 :root {
-  --lime: #d7f24d;
-  --green: #22c55e;
-  --red: #ef4444;
-  --amber: #f59e0b;
-  --muted: #9aa0ac;
-  --bg: #14161a;
-  --card-bg: #1c1f26;
-  --card-border: rgba(255, 255, 255, 0.08);
-  --text: #e8e9ec;
+  /* --- Superfícies -------------------------------------------------
+     Grafite/carvão, nunca preto puro: a diferença sutil entre o fundo
+     da página e o dos cards é o que cria a profundidade sem precisar de
+     borda forte ou sombra pesada. */
+  --bg: #0d0f11;
+  --bg-elevated: #111418;
+  --surface: rgba(255, 255, 255, 0.028);
+  --surface-hover: rgba(255, 255, 255, 0.045);
+  --surface-solid: #15181c;
+
+  /* Bordas quase imperceptíveis — presença por contraste mínimo, não
+     por linha visível. */
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.1);
+  --border-hover: rgba(255, 255, 255, 0.14);
+
+  /* --- Texto ------------------------------------------------------- */
+  --text: #eceef1;
+  --text-secondary: #a1a7b3;
+  --text-muted: #6b7280;
+
+  /* --- Acentos semânticos ------------------------------------------
+     Verde/vermelho "modernos e controlados" (não neon). As variantes
+     -soft são para fundos/badges; as puras, para ícone e texto. */
+  --green: #34d399;
+  --green-soft: rgba(52, 211, 153, 0.12);
+  --red: #f87171;
+  --red-soft: rgba(248, 113, 113, 0.12);
+  --amber: #fbbf24;
+  --amber-soft: rgba(251, 191, 36, 0.12);
+  --blue: #60a5fa;
+  --blue-soft: rgba(96, 165, 250, 0.12);
+  --purple: #a78bfa;
+  --purple-soft: rgba(167, 139, 250, 0.12);
+  --neutral: #9ca3af;
+  --neutral-soft: rgba(156, 163, 175, 0.12);
+
+  /* Identidade própria do Cansadão — usado com parcimônia (foco,
+     seleção, ação primária), não como cor de marca espalhada. */
+  --accent: #d7f24d;
+  --accent-soft: rgba(215, 242, 77, 0.12);
+
+  /* --- Elevação ----------------------------------------------------- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.42);
+
+  /* --- Forma / ritmo ------------------------------------------------ */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* Blur do glassmorphism — sutil de propósito: vidro escuro discreto,
+     não "cyberpunk". */
+  --blur: 12px;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
@@ -33,12 +82,24 @@ body {
 }
 
 body {
-  min-height: 100%;
+  min-height: 100vh;
   color: var(--text);
   background: var(--bg);
-  font-family: "Work Sans", sans-serif;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Iluminação ambiente extremamente sutil no topo — dá a impressão de
+   profundidade/fonte de luz sem virar "gradiente chamativo". */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(1200px 600px at 50% -200px, rgba(255, 255, 255, 0.022), transparent 70%);
+  z-index: 0;
 }
 
 a {
@@ -46,17 +107,10 @@ a {
   text-decoration: none;
 }
 
-h1,
-h2,
-h3 {
-  font-family: "Archivo", sans-serif;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-}
-
 button {
   font-family: inherit;
   cursor: pointer;
+  color: inherit;
 }
 
 input,
@@ -64,17 +118,22 @@ select {
   font-family: inherit;
 }
 
-/* Animações dos ícones de status (pedido do usuário: bolinha do "ao vivo"
-   pulsando como indicador de live, ampulheta do "pendente" girando devagar
-   e suave) — globais porque os componentes de ícone (icons.tsx) são
-   compartilhados entre vários lugares do app. */
+/* Foco visível e consistente em toda a interface (acessibilidade de
+   teclado) — some no clique de mouse graças a :focus-visible. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Pulso do indicador "ao vivo": halo transparente cresce e desvanece
+   atrás do ponto sólido. Global porque icons.tsx é compartilhado. */
 @keyframes dot-pulse {
   0% {
     transform: scale(1);
-    opacity: 0.55;
+    opacity: 0.5;
   }
   100% {
-    transform: scale(2.2);
+    transform: scale(2.4);
     opacity: 0;
   }
 }
@@ -82,26 +141,17 @@ select {
 .dot-pulse-halo {
   transform-origin: center;
   transform-box: fill-box;
-  animation: dot-pulse 1.6s ease-out infinite;
-}
-
-@keyframes icon-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.icon-spin {
-  transform-origin: center;
-  animation: icon-spin 3.5s linear infinite;
+  animation: dot-pulse 1.8s ease-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dot-pulse-halo,
-  .icon-spin {
+  .dot-pulse-halo {
     animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

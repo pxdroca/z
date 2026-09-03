@@ -4,9 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BetCard } from "@/components/BetCard";
 import { FilterPopover, type Filtro } from "@/components/FilterPopover";
 import { MetricsGrid, type MetricItem } from "@/components/MetricsGrid";
-import { CheckIcon, HourglassIcon, MinusIcon, XIcon } from "@/components/icons";
-import { calcularEstatisticas, calcularOddMedia } from "@/lib/estatisticas";
-import { PRIORIDADE_STATUS, STATUS_LABEL } from "@/lib/labels";
+import { SearchInput } from "@/components/SearchInput";
+import { StatusTabs, type FiltroGrupo } from "@/components/StatusTabs";
+import { LayersIcon, RefreshIcon, TargetIcon, TrendDownIcon, TrendUpIcon } from "@/components/icons";
+import { agruparBets, contarPorGrupo, GRUPO_LABEL, GRUPO_VAZIO } from "@/lib/agrupamento";
+import { filtrarPorBusca } from "@/lib/busca";
+import { calcularEstatisticas, calcularOddMedia, calcularSeries } from "@/lib/estatisticas";
+import { PRIORIDADE_STATUS } from "@/lib/labels";
 import type { Bet, BetStatus, ResultadoAposta } from "@/lib/types";
 import styles from "./page.module.css";
 
@@ -49,11 +53,22 @@ function filtroPadrao(): Filtro {
   };
 }
 
+function horaAgora(): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: FUSO_PADRAO,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date());
+}
+
 export default function Home() {
   const [filtro, setFiltro] = useState<Filtro>(filtroPadrao);
   const [bets, setBets] = useState<Bet[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
+  const [grupoAtivo, setGrupoAtivo] = useState<FiltroGrupo>("todas");
+  const [atualizadoEm, setAtualizadoEm] = useState<string | null>(null);
 
   const buscarBets = useCallback(async (f: Filtro) => {
     setCarregando(true);
@@ -68,6 +83,7 @@ export default function Home() {
       if (!resp.ok) throw new Error(`Falha ao buscar apostas (${resp.status})`);
       const data = await resp.json();
       setBets(data.bets);
+      setAtualizadoEm(horaAgora());
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro desconhecido.");
     } finally {
@@ -116,70 +132,145 @@ export default function Home() {
     });
   }, [bets]);
 
+  // A busca filtra só a exibição (client-side); as estatísticas seguem
+  // refletindo o filtro de status/período, não o texto digitado.
+  const apostasVisiveis = useMemo(
+    () => filtrarPorBusca(apostasOrdenadas, busca),
+    [apostasOrdenadas, busca]
+  );
+
+  const contagens = useMemo(() => contarPorGrupo(apostasVisiveis), [apostasVisiveis]);
   const grupos = useMemo(() => {
-    const resultado: { status: BetStatus; apostas: Bet[] }[] = [];
-    for (const bet of apostasOrdenadas) {
-      const ultimo = resultado[resultado.length - 1];
-      if (ultimo && ultimo.status === bet.status) {
-        ultimo.apostas.push(bet);
-      } else {
-        resultado.push({ status: bet.status, apostas: [bet] });
-      }
-    }
-    return resultado;
-  }, [apostasOrdenadas]);
+    const todos = agruparBets(apostasVisiveis);
+    return grupoAtivo === "todas" ? todos : todos.filter((g) => g.id === grupoAtivo);
+  }, [apostasVisiveis, grupoAtivo]);
 
   const stats = useMemo(() => calcularEstatisticas(apostasOrdenadas), [apostasOrdenadas]);
   const oddMedia = useMemo(() => calcularOddMedia(apostasOrdenadas), [apostasOrdenadas]);
+  const series = useMemo(() => calcularSeries(apostasOrdenadas), [apostasOrdenadas]);
 
-  const metricsDestaque: MetricItem[] = [
-    { icon: <CheckIcon color="var(--green)" />, label: "Green", valor: String(stats.green) },
-    { icon: <XIcon color="var(--red)" />, label: "Red", valor: String(stats.red) },
+  const totalDecididas = stats.green + stats.red;
+  const metricas: MetricItem[] = [
     {
-      label: "Unidades",
-      valor: `${stats.unidadesLiquidas >= 0 ? "+" : ""}${stats.unidadesLiquidas.toFixed(2)}`,
-      delta: stats.roi !== null ? `ROI ${stats.roi.toFixed(1)}%` : null,
+      icon: <TrendUpIcon color="var(--green)" />,
+      label: "Green",
+      valor: String(stats.green),
+      delta: totalDecididas > 0 ? `${((stats.green / totalDecididas) * 100).toFixed(1)}% do total` : null,
+      color: "var(--green)",
+      colorSoft: "var(--green-soft)",
+      serie: series.green,
     },
-  ];
-
-  const metricsSecundarias: MetricItem[] = [
-    { label: "Total no filtro", valor: String(apostasOrdenadas.length) },
-    { label: "Ao vivo agora", valor: String(apostasOrdenadas.filter((b) => b.status === "ao_vivo").length) },
-    { label: "Odd média", valor: oddMedia },
-    { icon: <MinusIcon color="var(--muted)" />, label: "Void", valor: String(stats.void) },
-    { icon: <HourglassIcon color="var(--lime)" />, label: "Pendente", valor: String(stats.pendente) },
-    { label: "Taxa de acerto", valor: stats.taxaAcerto !== null ? `${stats.taxaAcerto.toFixed(1)}%` : "—" },
+    {
+      icon: <TrendDownIcon color="var(--red)" />,
+      label: "Red",
+      valor: String(stats.red),
+      delta: totalDecididas > 0 ? `${((stats.red / totalDecididas) * 100).toFixed(1)}% do total` : null,
+      color: "var(--red)",
+      colorSoft: "var(--red-soft)",
+      serie: series.red,
+    },
+    {
+      icon: <LayersIcon color="var(--blue)" />,
+      label: "Unidades",
+      valor: `${stats.unidadesLiquidas >= 0 ? "+" : ""}${stats.unidadesLiquidas.toFixed(2)}u`,
+      delta: stats.roi !== null ? `ROI ${stats.roi.toFixed(1)}%` : null,
+      color: "var(--blue)",
+      colorSoft: "var(--blue-soft)",
+      serie: series.unidades,
+    },
+    {
+      icon: <TargetIcon color="var(--amber)" />,
+      label: "Odd média",
+      valor: oddMedia,
+      delta: "Média das odds",
+      color: "var(--amber)",
+      colorSoft: "var(--amber-soft)",
+      serie: series.odds,
+    },
+    {
+      icon: <TargetIcon color="var(--purple)" />,
+      label: "Taxa de acerto",
+      valor: stats.taxaAcerto !== null ? `${stats.taxaAcerto.toFixed(1)}%` : "—",
+      delta: totalDecididas > 0 ? `${stats.green} de ${totalDecididas} apostas` : null,
+      color: "var(--purple)",
+      colorSoft: "var(--purple-soft)",
+      serie: series.taxaAcerto,
+    },
   ];
 
   return (
     <div className={styles.container}>
-      <div className={styles.headerRow}>
-        <div className={styles.appHeader}>Cansadão Apostas</div>
-        <FilterPopover filtro={filtro} onChange={setFiltro} onRefresh={() => buscarBets(filtro)} />
-      </div>
+      <header className={styles.header}>
+        <div className={styles.headerTitulo}>
+          <h1 className={styles.appHeader}>Cansadão Apostas</h1>
+          <div className={styles.subtitulo}>
+            Acompanhamento das suas apostas
+            {atualizadoEm ? (
+              <>
+                <span className={styles.separador} />
+                <span className={styles.atualizado}>
+                  <span className={styles.pontoVivo} />
+                  Última atualização: {atualizadoEm}
+                </span>
+              </>
+            ) : null}
+          </div>
+        </div>
 
-      <MetricsGrid itens={metricsDestaque} destaque />
-      <MetricsGrid itens={metricsSecundarias} />
+        <div className={styles.headerAcoes}>
+          <SearchInput valor={busca} onChange={setBusca} />
+          <button
+            className={styles.refreshButton}
+            onClick={() => buscarBets(filtro)}
+            aria-label="Atualizar apostas"
+            title="Atualizar"
+          >
+            <span className={carregando ? styles.refreshGirando : undefined}>
+              <RefreshIcon size={15} />
+            </span>
+          </button>
+          <FilterPopover filtro={filtro} onChange={setFiltro} />
+        </div>
+      </header>
 
-      {erro ? <div className={styles.emptyState}>{erro}</div> : null}
+      <MetricsGrid itens={metricas} />
 
-      {carregando ? (
-        <div className={styles.loadingState}>Carregando...</div>
-      ) : apostasOrdenadas.length === 0 ? (
-        <div className={styles.emptyState}>Nenhuma aposta encontrada com os filtros atuais. Ajuste os filtros no botão de Filtros.</div>
+      <StatusTabs
+        ativo={grupoAtivo}
+        onChange={setGrupoAtivo}
+        contagens={contagens}
+        total={apostasVisiveis.length}
+      />
+
+      {erro ? <div className={styles.aviso}>{erro}</div> : null}
+
+      {carregando && bets.length === 0 ? (
+        <div className={styles.aviso}>Carregando...</div>
+      ) : apostasVisiveis.length === 0 ? (
+        <div className={styles.aviso}>
+          {busca
+            ? `Nenhuma aposta encontrada para "${busca}".`
+            : "Nenhuma aposta encontrada com os filtros atuais. Ajuste os filtros no botão de Filtros."}
+        </div>
       ) : (
         grupos.map((grupo) => (
-          <div key={grupo.status}>
-            <div className={styles.secaoStatus}>
-              {STATUS_LABEL[grupo.status]}
-              <span className={styles.secaoStatusCount}>({grupo.apostas.length})</span>
+          <section key={grupo.id} className={styles.secao}>
+            <div className={styles.secaoHeader}>
+              <span className={`${styles.secaoDot} ${styles[`dot_${grupo.id}`]}`} />
+              <span className={styles.secaoTitulo}>{GRUPO_LABEL[grupo.id]}</span>
+              <span className={styles.secaoCount}>({grupo.apostas.length})</span>
             </div>
-            <div className={styles.cardsGrid}>
-              {grupo.apostas.map((bet) => (
-                <BetCard key={bet.id} bet={bet} onUpdate={handleUpdateBet} />
-              ))}
-            </div>
-          </div>
+
+            {grupo.apostas.length === 0 ? (
+              <div className={styles.secaoVazia}>{GRUPO_VAZIO[grupo.id]}</div>
+            ) : (
+              <div className={styles.cardsGrid}>
+                {grupo.apostas.map((bet) => (
+                  <BetCard key={bet.id} bet={bet} onUpdate={handleUpdateBet} />
+                ))}
+              </div>
+            )}
+          </section>
         ))
       )}
     </div>

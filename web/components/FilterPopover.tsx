@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BET_STATUS_VALUES, type BetStatus } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/labels";
-import { SearchIcon } from "./icons";
+import { ChevronDownIcon, FilterIcon } from "./icons";
 import styles from "./FilterPopover.module.css";
 
 export interface Filtro {
@@ -13,11 +13,11 @@ export interface Filtro {
 }
 
 /**
- * Port de _header_e_filtros() em app.py (st.popover) — painel que abre/fecha
- * sobre o conteúdo, mesma posição (canto superior direito), mesmo conteúdo
- * (multiselect de status + período + botão de atualizar).
+ * Painel de filtros (status da partida + período) que abre a partir do
+ * botão no canto superior direito. O botão "Atualizar" vive fora daqui,
+ * como ação própria no header (ver page.tsx).
  */
-export function FilterPopover({ filtro, onChange, onRefresh }: { filtro: Filtro; onChange: (f: Filtro) => void; onRefresh: () => void }) {
+export function FilterPopover({ filtro, onChange }: { filtro: Filtro; onChange: (f: Filtro) => void }) {
   const [aberto, setAberto] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -42,9 +42,13 @@ export function FilterPopover({ filtro, onChange, onRefresh }: { filtro: Filtro;
       <button
         className={aberto ? `${styles.trigger} ${styles.triggerAberto}` : styles.trigger}
         onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
       >
-        <SearchIcon />
+        <FilterIcon size={14} />
         Filtros
+        <span className={aberto ? `${styles.chevron} ${styles.chevronAberto}` : styles.chevron}>
+          <ChevronDownIcon size={13} />
+        </span>
       </button>
 
       {aberto ? (
@@ -54,7 +58,7 @@ export function FilterPopover({ filtro, onChange, onRefresh }: { filtro: Filtro;
             {BET_STATUS_VALUES.map((s) => {
               const ativo = filtro.status.includes(s);
               return (
-                <label key={s} className={ativo ? styles.statusChip : `${styles.statusChip} ${styles.statusChipInativo}`}>
+                <label key={s} className={ativo ? `${styles.statusChip} ${styles.statusChipAtivo}` : styles.statusChip}>
                   <input type="checkbox" checked={ativo} onChange={() => toggleStatus(s)} />
                   {STATUS_LABEL[s]}
                 </label>
@@ -77,10 +81,6 @@ export function FilterPopover({ filtro, onChange, onRefresh }: { filtro: Filtro;
               onChange={(e) => onChange({ ...filtro, to: e.target.value })}
             />
           </div>
-
-          <button className={styles.refreshButton} onClick={onRefresh}>
-            Atualizar agora
-          </button>
         </div>
       ) : null}
     </div>

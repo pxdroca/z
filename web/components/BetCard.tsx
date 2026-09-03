@@ -2,69 +2,69 @@
 
 import { useState } from "react";
 import type { Bet, BetStatus, ResultadoAposta } from "@/lib/types";
-import { RESULTADO_CSS_CLASS, RESULTADO_LABEL, STATUS_CSS_CLASS, STATUS_LABEL } from "@/lib/labels";
+import { RESULTADO_LABEL, STATUS_LABEL } from "@/lib/labels";
 import { BookmakerButtons } from "./BookmakerButtons";
 import { StatusResultEditor } from "./StatusResultEditor";
-import { AlertIcon, CheckIcon, CoinIcon, DotIcon, HourglassIcon, MinusIcon, PencilIcon, SquareIcon, TrophyIcon, XIcon } from "./icons";
+import { AlertIcon, CheckIcon, CoinIcon, DotIcon, HourglassIcon, MinusIcon, PencilIcon, XIcon } from "./icons";
 import styles from "./BetCard.module.css";
 
-const STATUS_CLASS_MAP: Record<string, string> = {
-  "status-agendada": styles.statusAgendada,
-  "status-ao-vivo": styles.statusAoVivo,
-  "status-alerta": styles.statusAlerta,
-  "status-encerrada": styles.statusEncerrada,
+/** Cor de acento por resultado da aposta — usada só no ícone e no texto
+ *  do status e no nome do vencedor, nunca como fundo cheio do card. */
+const COR_RESULTADO: Record<ResultadoAposta, string> = {
+  green: "var(--green)",
+  cashout: "var(--amber)",
+  red: "var(--red)",
+  void: "var(--neutral)",
+  pendente: "var(--amber)",
 };
 
-const RESULTADO_CLASS_MAP: Record<string, string> = {
-  "resultado-green": styles.resultadoGreen,
-  "resultado-red": styles.resultadoRed,
-  "resultado-void": styles.resultadoVoid,
-  "resultado-pendente": styles.resultadoPendente,
-  "resultado-cashout": styles.resultadoCashout,
-};
-
-function StatusIcon({ status }: { status: BetStatus }) {
-  switch (status) {
-    case "agendada":
-      return <DotIcon color="var(--green)" />;
-    case "ao_vivo":
-      // Pulso de "live" (halo transparente crescendo/desvanecendo atrás
-      // do ponto sólido) — pedido do usuário, mesmo efeito de indicador
-      // ao vivo comum em players de vídeo.
-      return <DotIcon color="var(--red)" pulse />;
-    case "encerrada":
-      return <SquareIcon color="var(--muted)" />;
+function ResultadoIcon({ resultado, size = 13 }: { resultado: ResultadoAposta; size?: number }) {
+  const cor = COR_RESULTADO[resultado];
+  switch (resultado) {
+    case "green":
+      return <CheckIcon color={cor} size={size} />;
+    case "red":
+      return <XIcon color={cor} size={size} />;
+    case "void":
+      return <MinusIcon color={cor} size={size} />;
+    case "cashout":
+      return <CoinIcon color={cor} size={size} />;
     default:
-      return <AlertIcon color="var(--lime)" />;
+      return <HourglassIcon color={cor} size={size} />;
   }
 }
 
-function ResultadoIcon({ resultado }: { resultado: ResultadoAposta }) {
-  switch (resultado) {
-    case "green":
-      return <CheckIcon color="var(--green)" />;
-    case "red":
-      return <XIcon color="var(--red)" />;
-    case "void":
-      return <MinusIcon color="var(--muted)" />;
-    case "cashout":
-      return <CoinIcon color="var(--amber)" />;
+function StatusPartidaIcon({ status }: { status: BetStatus }) {
+  switch (status) {
+    case "ao_vivo":
+      return <DotIcon color="var(--red)" size={6} pulse />;
+    case "agendada":
+      return <DotIcon color="var(--neutral)" size={5} />;
+    case "nao_encontrada":
+    case "erro_extracao":
+      return <AlertIcon color="var(--text-muted)" size={11} />;
     default:
-      // Parada (usuário achou o giro contínuo pouco elaborado/não gostou
-      // do resultado — reverte pra ícone estático até pensarmos numa
-      // animação mais trabalhada).
-      return <HourglassIcon color="var(--lime)" />;
+      return null;
   }
 }
 
 function formatarData(isoString: string | null): string {
-  if (!isoString) return "não encontrada";
+  if (!isoString) return "—";
   const d = new Date(isoString);
   const dia = String(d.getDate()).padStart(2, "0");
   const mes = String(d.getMonth() + 1).padStart(2, "0");
   const hora = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
-  return `${dia}/${mes} ${hora}:${min}`;
+  return `${dia}/${mes} · ${hora}:${min}`;
+}
+
+/** "6-3, 2-6, 2-6" -> "6–3 · 2–6 · 2–6" (traço meia-risca + separador
+ *  ponto, como na direção visual). Puramente cosmético. */
+function formatarPlacar(placar: string): string {
+  return placar
+    .split(",")
+    .map((s) => s.trim().replace("-", "–"))
+    .join(" · ");
 }
 
 export function BetCard({
@@ -78,15 +78,8 @@ export function BetCard({
   const [salvando, setSalvando] = useState(false);
 
   const temPlacarAoVivo = bet.status === "ao_vivo" && Boolean(bet.placar_final);
-  const temPlacarFinal = bet.status === "encerrada" && Boolean(bet.placar_final);
-
-  const cardClasse = [
-    styles.card,
-    editando ? styles.cardComEditor : "",
-    temPlacarAoVivo ? styles.comPlacarAoVivo : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const temResultadoFinal = bet.status === "encerrada" && Boolean(bet.placar_final);
+  const corResultado = COR_RESULTADO[bet.resultado];
 
   async function handleChangeStatus(novo: BetStatus) {
     setSalvando(true);
@@ -108,19 +101,23 @@ export function BetCard({
 
   return (
     <div>
-      <div className={cardClasse}>
-        <div className={styles.torneio}>{bet.torneio || "Torneio não identificado"}</div>
+      <div className={editando ? `${styles.card} ${styles.cardComEditor}` : styles.card}>
+        <div className={styles.topRow}>
+          <span className={styles.statusInline} style={{ color: corResultado }}>
+            <ResultadoIcon resultado={bet.resultado} />
+            {RESULTADO_LABEL[bet.resultado]}
+          </span>
 
-        <div className={styles.headerRow}>
-          <div className={styles.jogo}>{bet.jogo}</div>
-          <div className={styles.badgesRow}>
-            <span className={`${styles.statusBadge} ${STATUS_CLASS_MAP[STATUS_CSS_CLASS[bet.status]]}`}>
-              <StatusIcon status={bet.status} />
+          <div className={styles.acoes}>
+            <span
+              className={
+                bet.status === "ao_vivo"
+                  ? `${styles.statusPartida} ${styles.statusPartidaAoVivo}`
+                  : styles.statusPartida
+              }
+            >
+              <StatusPartidaIcon status={bet.status} />
               {STATUS_LABEL[bet.status]}
-            </span>
-            <span className={`${styles.resultadoBadge} ${RESULTADO_CLASS_MAP[RESULTADO_CSS_CLASS[bet.resultado]]}`}>
-              <ResultadoIcon resultado={bet.resultado} />
-              {RESULTADO_LABEL[bet.resultado]}
             </span>
             <button
               className={styles.editButton}
@@ -128,35 +125,47 @@ export function BetCard({
               aria-label={editando ? "Fechar edição" : "Editar status/resultado"}
               title={editando ? "Fechar edição" : "Editar status/resultado"}
             >
-              {editando ? <XIcon /> : <PencilIcon />}
+              {editando ? <XIcon size={14} /> : <PencilIcon size={14} />}
             </button>
           </div>
         </div>
 
-        <div className={styles.mercadoLabel}>Mercado</div>
+        <div className={styles.jogo}>{bet.jogo}</div>
+        <div className={styles.torneio}>{bet.torneio || "Torneio não identificado"}</div>
+
+        <div className={styles.label}>Mercado</div>
         <div className={styles.mercadoValor}>{bet.mercado || "Mercado não identificado"}</div>
 
         <div className={styles.infoRow}>
           <div>
-            <div className={styles.infoLabel}>Odd</div>
+            <div className={styles.label}>Odd</div>
             <div className={styles.infoValor}>{bet.odd !== null ? bet.odd.toFixed(2) : "—"}</div>
           </div>
           <div>
-            <div className={styles.infoLabel}>Unidades</div>
+            <div className={styles.label}>Unidades</div>
             <div className={styles.infoValor}>{bet.unidades.toFixed(1)}</div>
           </div>
           <div>
-            <div className={styles.infoLabel}>Data/Hora</div>
+            <div className={styles.label}>Data / Hora</div>
             <div className={styles.infoValor}>{formatarData(bet.data_hora)}</div>
           </div>
         </div>
 
-        {temPlacarAoVivo ? <div className={styles.placarAoVivo}>{bet.placar_final}</div> : null}
+        {temPlacarAoVivo ? (
+          <div className={styles.placarAoVivo}>
+            <span className={styles.placarAoVivoLabel}>Parcial</span>
+            <span className={styles.resultadoPlacar}>{formatarPlacar(bet.placar_final!)}</span>
+          </div>
+        ) : null}
 
-        {temPlacarFinal ? (
-          <div className={styles.placarFinal}>
-            <TrophyIcon color="var(--green)" />
-            {bet.vencedor_partida || "?"} venceu <span className={styles.placarNumeros}>{bet.placar_final}</span>
+        {temResultadoFinal ? (
+          <div className={styles.resultadoBox}>
+            <div className={styles.label}>Resultado</div>
+            <div className={styles.resultadoLinha} style={{ color: corResultado }}>
+              <ResultadoIcon resultado={bet.resultado} size={12} />
+              {bet.vencedor_partida || "?"} venceu
+            </div>
+            <div className={styles.resultadoPlacar}>{formatarPlacar(bet.placar_final!)}</div>
           </div>
         ) : null}
 

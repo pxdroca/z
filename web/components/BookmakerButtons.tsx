@@ -2,9 +2,11 @@ import { LOGO_BETANO, LOGO_SUPERBET } from "@/lib/bookmakerLogos";
 import type { Bet } from "@/lib/types";
 import styles from "./BetCard.module.css";
 
-// Port de BOOKMAKER_BADGES em app.py — mesmas cores de marca, mesmo
-// tratamento especial pra bet365 (wordmark de texto em vez de SVG, ver
-// bookmakerLogos.ts para o porquê).
+// Casas de apostas. As logos continuam as oficiais (SVG embutido, ver
+// bookmakerLogos.ts; bet365 é wordmark de texto porque o SVG oficial tem
+// duas cores). Mudança visual: os botões viraram secundários — superfície
+// neutra de vidro em vez do fundo cheio na cor de marca, que dominava o
+// card. A cor de marca fica só como uma pincelada sutil no hover.
 const BOOKMAKER_BADGES: Record<string, { logo?: string; wordmark?: boolean; cor: string }> = {
   superbet: { logo: LOGO_SUPERBET, cor: "#e2001a" },
   betano: { logo: LOGO_BETANO, cor: "#ff5000" },
@@ -51,10 +53,13 @@ export function BookmakerButtons({ links }: { links: Bet["links"] }) {
           <a
             key={slug}
             className={styles.bookmakerBtn}
-            style={{ background: cor }}
+            // A cor de marca vira só uma variável consumida pelo hover no
+            // CSS (borda/tint sutil) — não mais o fundo cheio do botão.
+            style={{ "--marca": cor } as React.CSSProperties}
             href={info.url}
             target="_blank"
             rel="noopener noreferrer"
+            title={info.nome}
           >
             {conteudo}
           </a>

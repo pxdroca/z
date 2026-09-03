@@ -3,38 +3,48 @@
 }
 
 .trigger {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  width: 100%;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  color: #fff;
-  font-weight: 600;
-  font-size: 0.9rem;
-  border-radius: 10px;
-  padding: 0.5rem 1rem;
-  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  gap: 0.45rem;
+  height: 2.35rem;
+  padding: 0 0.85rem;
+  background: var(--surface);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.18s var(--ease), border-color 0.18s var(--ease);
 }
 
 .trigger:hover {
-  border-color: rgba(255, 255, 255, 0.25);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 .triggerAberto {
-  border-color: var(--lime);
-  color: var(--lime);
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
 }
 
-.triggerAberto:hover {
-  border-color: var(--lime);
+.chevron {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  transition: transform 0.2s var(--ease);
 }
 
-@keyframes panel-fade-in {
+.chevronAberto {
+  transform: rotate(180deg);
+}
+
+@keyframes panel-in {
   from {
     opacity: 0;
-    transform: translateY(-6px) scale(0.98);
+    transform: translateY(-6px) scale(0.985);
   }
   to {
     opacity: 1;
@@ -44,127 +54,112 @@
 
 .panel {
   position: absolute;
-  top: calc(100% + 0.4rem);
+  top: calc(100% + 0.5rem);
   right: 0;
-  z-index: 20;
+  z-index: 30;
   width: 20rem;
   max-width: calc(100vw - 2rem);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
   padding: 1rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  animation: panel-fade-in 0.16s ease-out;
+  background: rgba(21, 24, 28, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: panel-in 0.16s var(--ease);
   transform-origin: top right;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .panel {
-    animation: none;
-  }
-}
-
-@media (max-width: 640px) {
-  /* No mobile o .wrapper não fica colado na borda direita REAL da
-     viewport (o container do header tem padding próprio) — "right: 0"
-     relativo ao wrapper deslocava o painel (quase tão largo quanto a
-     tela) pra fora da borda esquerda. Em vez de ancorar no trigger
-     (exigiria calcular a posição dele via JS), vira uma folha fixa
-     ancorada no TOPO da viewport — perto de onde o botão "Filtros" de
-     fato fica (topo da página), diferente da 1ª tentativa (ancorada no
-     rodapé), que o usuário corretamente achou sem sentido com o botão
-     lá em cima. "top"/"left"/"right" fixos não dependem de onde o botão
-     está, só da tela em si, então nunca vaza pra fora independente da
-     largura do wrapper/container. */
-  .panel {
-    position: fixed;
-    top: 4.5rem;
-    left: 1rem;
-    right: 1rem;
-    bottom: auto;
-    width: auto;
-    max-width: none;
-    max-height: calc(100vh - 6rem);
-    overflow-y: auto;
-  }
-}
-
 .sectionLabel {
-  color: var(--muted);
-  text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
+  margin-bottom: 0.55rem;
+  font-size: 0.68rem;
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .statusOptions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.1rem;
 }
 
+/* Chip de status: quando ativo ganha só uma superfície levemente mais
+   clara + borda de acento, nunca um fundo colorido cheio. */
 .statusChip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  background: rgba(215, 242, 77, 0.12);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.8rem;
-  color: var(--lime);
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
 }
 
 .statusChip:hover {
-  border-color: rgba(215, 242, 77, 0.4);
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+
+.statusChipAtivo {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-hover);
+  color: var(--text);
 }
 
 .statusChip input {
-  accent-color: var(--lime);
-}
-
-.statusChipInativo {
-  background: transparent;
-  border-color: var(--card-border);
-  color: var(--muted);
+  width: 0.85rem;
+  height: 0.85rem;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .dateRow {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 1rem;
 }
 
 .dateInput {
   flex: 1 1 0;
   min-width: 0;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
+  height: 2.2rem;
+  padding: 0 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   color: var(--text);
-  padding: 0.4rem 0.5rem;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
+  transition: border-color 0.15s var(--ease);
 }
 
-.refreshButton {
-  width: 100%;
-  background: var(--lime);
-  color: #14161a;
-  font-weight: 700;
-  border: none;
-  border-radius: 10px;
-  padding: 0.55rem;
-  transition: filter 0.15s ease, transform 0.1s ease;
+.dateInput:hover {
+  border-color: var(--border-strong);
 }
 
-.refreshButton:hover {
-  filter: brightness(1.08);
+.dateInput:focus {
+  outline: none;
+  border-color: var(--border-hover);
 }
 
-.refreshButton:active {
-  transform: scale(0.98);
+@media (max-width: 640px) {
+  /* No mobile o wrapper não fica colado na borda direita real da viewport
+     (o container tem padding próprio), então "right: 0" relativo a ele
+     deslocaria o painel pra fora da tela. position:fixed com left/right
+     fixos resolve sem precisar calcular a posição do trigger via JS. */
+  .panel {
+    position: fixed;
+    top: 8.5rem;
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - 10rem);
+    overflow-y: auto;
+  }
 }

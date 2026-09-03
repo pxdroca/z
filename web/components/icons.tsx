@@ -127,3 +127,78 @@ export function TrophyIcon({ color = "currentColor", size = 14 }: IconProps) {
     </svg>
   );
 }
+
+export function RefreshIcon({ color = "currentColor", size = 15 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+      <path d="M3 21v-5h5" />
+    </svg>
+  );
+}
+
+export function FilterIcon({ color = "currentColor", size = 15 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <path d="M3 4.5h18l-7 8.5v6l-4 2v-8L3 4.5Z" />
+    </svg>
+  );
+}
+
+export function ChevronDownIcon({ color = "currentColor", size = 14 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+export function TrendUpIcon({ color = "currentColor", size = 14 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <path d="M22 7 13.5 15.5l-5-5L2 17" />
+      <path d="M16 7h6v6" />
+    </svg>
+  );
+}
+
+export function TrendDownIcon({ color = "currentColor", size = 14 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <path d="M22 17 13.5 8.5l-5 5L2 7" />
+      <path d="M16 17h6v-6" />
+    </svg>
+  );
+}
+
+export function LayersIcon({ color = "currentColor", size = 14 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <path d="m12 2 9 5-9 5-9-5 9-5Z" />
+      <path d="m3 12 9 5 9-5" />
+      <path d="m3 17 9 5 9-5" />
+    </svg>
+  );
+}
+
+export function TargetIcon({ color = "currentColor", size = 14 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1.4" />
+    </svg>
+  );
+}
+
+export function MoreIcon({ color = "currentColor", size = 15 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="12" cy="19" r="1" />
+    </svg>
+  );
+}

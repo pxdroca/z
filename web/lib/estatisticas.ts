@@ -46,3 +46,64 @@ export function calcularOddMedia(apostas: Bet[]): string {
   const soma = comOdd.reduce((s, b) => s + (b.odd as number), 0);
   return (soma / comOdd.length).toFixed(2);
 }
+
+/**
+ * Série de valores para os sparklines dos cards de estatística — dados
+ * REAIS derivados das apostas já carregadas (nada sintético), na ordem
+ * cronológica em que foram resolvidas.
+ *
+ * Só apostas já decididas entram (green/cashout/red): pendentes e void
+ * não movem o resultado, então incluí-las achataria a curva com pontos
+ * repetidos sem significado.
+ */
+export interface SeriesSparkline {
+  /** Saldo acumulado de unidades ao longo do tempo. */
+  unidades: number[];
+  /** Nº acumulado de greens (inclui cashout, como no resto das contas). */
+  green: number[];
+  /** Nº acumulado de reds. */
+  red: number[];
+  /** Taxa de acerto acumulada (%) após cada aposta decidida. */
+  taxaAcerto: number[];
+  /** Odd de cada aposta decidida, na ordem — mostra a dispersão das odds. */
+  odds: number[];
+}
+
+export function calcularSeries(apostas: Bet[]): SeriesSparkline {
+  const decididas = apostas
+    .filter((b) => b.resultado === "green" || b.resultado === "cashout" || b.resultado === "red")
+    .slice()
+    .sort((a, b) => {
+      const ta = a.data_hora ? new Date(a.data_hora).getTime() : 0;
+      const tb = b.data_hora ? new Date(b.data_hora).getTime() : 0;
+      return ta - tb;
+    });
+
+  const unidades: number[] = [];
+  const green: number[] = [];
+  const red: number[] = [];
+  const taxaAcerto: number[] = [];
+  const odds: number[] = [];
+
+  let saldo = 0;
+  let nGreen = 0;
+  let nRed = 0;
+
+  for (const bet of decididas) {
+    const ehGreen = bet.resultado === "green" || bet.resultado === "cashout";
+    if (ehGreen) {
+      nGreen += 1;
+      if (bet.odd !== null) saldo += bet.unidades * (bet.odd - 1);
+    } else {
+      nRed += 1;
+      saldo -= bet.unidades;
+    }
+    unidades.push(saldo);
+    green.push(nGreen);
+    red.push(nRed);
+    taxaAcerto.push((nGreen / (nGreen + nRed)) * 100);
+    if (bet.odd !== null) odds.push(bet.odd);
+  }
+
+  return { unidades, green, red, taxaAcerto, odds };
+}

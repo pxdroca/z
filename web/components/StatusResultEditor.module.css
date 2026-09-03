@@ -9,47 +9,50 @@
   }
 }
 
+/* "Colado" na base do card acima: mesma superfície de vidro, sem borda
+   entre os dois, cantos inferiores arredondados só aqui. */
 .editor {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 0 0 16px 16px;
-  padding: 0.5rem 0.9rem 0.7rem;
-  margin-bottom: 0.9rem;
   display: flex;
-  gap: 0.6rem;
-  animation: editor-slide-in 0.18s ease-out;
+  gap: 0.5rem;
+  padding: 0.65rem 1.1rem 0.8rem;
+  background: var(--surface-hover);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+  border: 1px solid var(--border-hover);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  animation: editor-slide-in 0.18s var(--ease);
 }
 
 .select {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 2.1rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
+  height: 2.1rem;
+  padding: 0 0.55rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   color: var(--text);
   font-size: 0.78rem;
-  padding: 0.3rem 0.5rem;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease);
 }
 
 .select:hover:not(:disabled) {
-  border-color: rgba(215, 242, 77, 0.4);
+  border-color: var(--border-hover);
 }
 
-.select:focus-visible {
+.select:focus {
   outline: none;
-  border-color: var(--lime);
+  border-color: var(--border-hover);
 }
 
 .select:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (max-width: 640px) {
   .editor {
-    animation: none;
+    padding: 0.6rem 0.95rem 0.75rem;
   }
 }

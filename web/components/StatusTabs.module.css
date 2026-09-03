@@ -1,0 +1,88 @@
+.wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+/* Segmented control: uma "trilha" de vidro escuro com as opções dentro;
+   a selecionada ganha uma superfície levemente mais clara, não uma cor
+   cheia (verde/vermelho ficam só nos indicadores). */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.25rem;
+  background: var(--surface);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.8rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: background-color 0.18s var(--ease), color 0.18s var(--ease);
+}
+
+.tab:hover:not(.tabAtiva) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.tabAtiva {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Bolinha colorida do status — o único lugar onde a cor aparece nas tabs. */
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.count {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  transition: color 0.18s var(--ease);
+}
+
+.tabAtiva .count {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .wrapper {
+    margin-bottom: 1.25rem;
+  }
+  .tabs {
+    width: 100%;
+  }
+  .tab {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.8rem;
+  }
+}
