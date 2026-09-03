@@ -401,16 +401,24 @@ async def poll_new_messages() -> None:
     a última execução e sai — em vez de ficar conectado 24/7 (run_listener),
     pensado pra ser chamado por um cron.
 
-    "Última execução" é rastreado via sync_state no Postgres (chave
-    _SYNC_STATE_KEY), não em disco local, porque o runner do Actions é uma
-    máquina nova a cada execução.
+    "Última execução" é rastreado via sync_state no Postgres, POR CHAT (a
+    chave inclui source_chat.id) — bug real encontrado em produção: quando
+    TELEGRAM_SOURCE_CHAT é um prefixo de nome (ver _resolve_source_chat) e
+    o grupo é recriado a cada dia, cada grupo novo é um chat_id diferente
+    do Telegram com sua PRÓPRIA numeração de mensagens (reinicia perto de
+    1). Guardar um único last_message_id global (sem o chat_id) fazia o
+    poll do dia seguinte reaplicar o min_id do grupo de ONTEM (ex: 326) no
+    grupo de HOJE — como as mensagens novas do grupo novo têm ids bem
+    menores que esse min_id herdado, ficavam todas escondidas pra sempre,
+    silenciosamente (sem erro, só "0 mensagens novas" no log).
     """
     init_db()
     client = _build_client()
     async with client:
         source_chat = await _resolve_source_chat(client)
+        sync_key = f"{_SYNC_STATE_KEY}:{source_chat.id}"
 
-        last_id_raw = get_sync_state(_SYNC_STATE_KEY)
+        last_id_raw = get_sync_state(sync_key)
         min_id = int(last_id_raw) if last_id_raw else 0
 
         mensagens = []
@@ -438,7 +446,7 @@ async def poll_new_messages() -> None:
             maior_id = max(maior_id, message.id)
 
         if maior_id != min_id:
-            set_sync_state(_SYNC_STATE_KEY, str(maior_id))
+            set_sync_state(sync_key, str(maior_id))
 
 
 def main() -> None:
