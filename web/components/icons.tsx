@@ -202,3 +202,59 @@ export function MoreIcon({ color = "currentColor", size = 15 }: IconProps) {
     </svg>
   );
 }
+
+/** Bola de tênis estilizada — mesmo estilo de contorno fino dos demais ícones. */
+export function TennisBallIcon({ color = "currentColor", size = 14 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M4.2 7.8C7.5 9 9.3 12.2 8.2 16.3" />
+      <path d="M19.8 16.2c-3.3-1.2-5.1-4.4-4-8.5" />
+    </svg>
+  );
+}
+
+/** Bola de basquete estilizada — mesmo estilo de contorno fino dos demais ícones. */
+export function BasketballIcon({ color = "currentColor", size = 14 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3v18" />
+      <path d="M5.6 5.6c2.4 1.9 3.8 4 3.8 6.4s-1.4 4.5-3.8 6.4" />
+      <path d="M18.4 5.6c-2.4 1.9-3.8 4-3.8 6.4s1.4 4.5 3.8 6.4" />
+    </svg>
+  );
+}
+
+/** Cadeado — usado no campo de senha da tela de login. */
+export function LockIcon({ color = "currentColor", size = 15 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <rect x="4" y="10.5" width="16" height="10" rx="2" />
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+    </svg>
+  );
+}
+
+/** Camera/imagem — usado no botão de exportar resumo do dia. */
+export function ImageIcon({ color = "currentColor", size = 15 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
+  );
+}
+
+/** Seta pra baixo dentro de uma bandeja — usado como ícone de "baixar imagem". */
+export function DownloadIcon({ color = "currentColor", size = 15 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M12 15V3" />
+    </svg>
+  );
+}

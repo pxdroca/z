@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BetCard } from "@/components/BetCard";
 import { FilterPopover, type Filtro } from "@/components/FilterPopover";
+import { GerarImagemResumo } from "@/components/GerarImagemResumo";
 import { MetricsGrid, type MetricItem } from "@/components/MetricsGrid";
 import { SearchInput } from "@/components/SearchInput";
 import { StatusTabs, type FiltroGrupo } from "@/components/StatusTabs";
@@ -229,6 +230,7 @@ export default function Home() {
               <RefreshIcon size={15} />
             </span>
           </button>
+          <GerarImagemResumo bets={bets} />
           <FilterPopover filtro={filtro} onChange={setFiltro} />
         </div>
       </header>
