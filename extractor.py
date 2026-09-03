@@ -300,6 +300,54 @@ def _find_players_in_card_line(texto: str) -> tuple[Optional[str], Optional[str]
             return m.group(1).strip(), m.group(2).strip()
     return None, None
 
+
+# Sufixo de nome de franquia de basquete ("Hawks", "36ers", "Lakers"...).
+# É o que permite achar os dois times numa linha suja de OCR sem cair em
+# texto de UI: exige o sufixo nos DOIS lados do confronto.
+#
+# Bug real (03/09/2026): a tip de basquete "AO VIVO! mais de 198.5 pontos"
+# vinha com um print onde o OCR leu certinho
+# "Q1 * 9' Illawara Hawks Adelaide 36ers", mas nenhum padrão pegava os
+# times: _CARD_LINE_PATTERN exige a linha inteira em 2+2 palavras
+# capitalizadas, e aqui há prefixo de placar ("Q1 * 9'") e um nome que
+# começa com dígito ("36ers"). A aposta ficou sem confronto.
+_TIME_BASQUETE_SUFIXOS = (
+    r"(?:[0-9]*ers|Hawks|Lakers|Celtics|Bulls|Heat|Nets|Knicks|Suns|Kings|"
+    r"Jazz|Magic|Pacers|Pistons|Raptors|Rockets|Spurs|Thunder|Wizards|"
+    r"Warriors|Clippers|Grizzlies|Hornets|Mavericks|Nuggets|Pelicans|"
+    r"Timberwolves|Trail Blazers|Blazers|Bucks|Cavaliers|Wildcats|Tigers|"
+    r"Eagles|Bears|Wolves|Giants|Kangaroos|Bullets|Breakers|Phoenix|Taipans|"
+    r"Crocodiles|United|Cairns|Sixers)"
+)
+
+# "<Cidade> <Sufixo> <Cidade> <Sufixo>" em qualquer lugar da linha (o OCR
+# põe placar/tempo antes). Cidade = 1-2 palavras capitalizadas.
+_BASQUETE_CONFRONTO_PATTERN = re.compile(
+    r"((?:[A-ZÀ-Ú][\wÀ-ú.'\-]+[ \t]+){1,2}" + _TIME_BASQUETE_SUFIXOS + r")"
+    r"[ \t]+"
+    r"((?:[A-ZÀ-Ú][\wÀ-ú.'\-]+[ \t]+){1,2}" + _TIME_BASQUETE_SUFIXOS + r")",
+    re.IGNORECASE,
+)
+
+
+def _find_basketball_teams(texto: str) -> tuple[Optional[str], Optional[str]]:
+    """Acha os dois times de basquete no texto do OCR.
+
+    Separado de _find_players_in_card_line porque nome de franquia não
+    segue o formato "Nome Sobrenome" de tenista: tem cidade composta
+    ("Los Angeles Lakers") e sufixo que pode começar com dígito
+    ("Adelaide 36ers"). Exigir o sufixo de franquia nos dois lados é o que
+    evita casar com texto de UI do app.
+    """
+    for linha in texto.splitlines():
+        linha = " ".join(linha.split())
+        if not linha:
+            continue
+        m = _BASQUETE_CONFRONTO_PATTERN.search(linha)
+        if m:
+            return m.group(1).strip(), m.group(2).strip()
+    return None, None
+
 _LABELLED_PATTERNS = {
     "torneio": re.compile(r"(?:torneio|tournament|campeonato)\s*[:\-]\s*(.+)", re.IGNORECASE),
     # "mercado"/"market" são rótulos inequívocos. "aposta" é ambíguo — o
@@ -501,6 +549,9 @@ def parse_free_text(texto: str) -> ExtractedBet:
     texto = texto or ""
     jogador1 = jogador2 = torneio = mercado = None
     odd: Optional[float] = None
+    # Calculado aqui (e não só no return) porque a busca dos times de
+    # basquete depende dele — ver _find_basketball_teams abaixo.
+    esporte_detectado = _detectar_esporte(texto)
 
     # Formato "N set [Jogador] odd" (número do set ANTES do nome) — ver
     # _SET_PREFIXO_PATTERN. Checado primeiro porque resolve jogador E
@@ -524,6 +575,18 @@ def parse_free_text(texto: str) -> ExtractedBet:
         j1, j2 = _find_players_in_card_line(texto)
         if j1 and j2:
             jogador1, jogador2, mercado = j1, j2, None
+
+    # Basquete: nome de franquia não cabe no formato "Nome Sobrenome" que os
+    # padrões acima esperam (ver _find_basketball_teams). Só roda quando o
+    # esporte já foi detectado como basquete, pra não arriscar casar um
+    # confronto de tênis com a lista de sufixos de time.
+    if (jogador1 is None or jogador2 is None) and esporte_detectado == Esporte.BASQUETE.value:
+        j1, j2 = _find_basketball_teams(texto)
+        if j1 and j2:
+            jogador1, jogador2 = j1, j2
+            # Preserva o mercado: numa aposta de total de pontos ele não
+            # depende de time nenhum ("mais de 198.5 pontos"), e sobrescrever
+            # com None perderia a única informação útil da tip.
 
     for campo, pattern in _LABELLED_PATTERNS.items():
         m = pattern.search(texto)
@@ -614,7 +677,7 @@ def parse_free_text(texto: str) -> ExtractedBet:
         odd=odd,
         texto_bruto=texto,
         confianca=round(confianca, 2),
-        esporte=_detectar_esporte(texto),
+        esporte=esporte_detectado,
     )
 
 
