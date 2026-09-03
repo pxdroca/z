@@ -55,30 +55,50 @@
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.42);
 
-  /* --- Vidro (glassmorphism) ---------------------------------------
-     Um único conjunto de tokens para toda superfície de vidro (cards de
-     aposta, cards de métrica, popovers, diálogo). Antes cada componente
-     repetia --surface + --border + blur por conta própria e o efeito
-     ficava quase invisível: o fundo era transparente demais (0.028) pra
-     haver material sobre o qual o blur pudesse aparecer.
+  /* --- Vidro (Liquid Glass) ----------------------------------------
+     Modelado a partir do material do sistema da Apple ("Meet Liquid
+     Glass", WWDC25). O que diferencia Liquid Glass de um blur comum, nas
+     palavras deles, é que o material NÃO só espalha a luz — ele a
+     entorta e concentra ("lensing"), e é composto de camadas que se
+     adaptam ao conteúdo atrás:
 
-     O valor alto (0.55-0.70 de opacidade sobre um grafite) é o que faz o
-     vidro existir: escuro o bastante pra não clarear o card, opaco o
-     bastante pra ler como superfície. */
-  --glass-bg: rgba(25, 29, 34, 0.62);
-  --glass-bg-hover: rgba(31, 36, 42, 0.72);
+       1. blur + saturação  — o corpo do vidro
+       2. lensing/refração  — a luz entortando na BORDA (mais forte nas
+                              quinas, é o que dá espessura ao material)
+       3. specular highlight— o brilho de quina, mais forte no topo/
+                              esquerda, decaindo pro lado oposto
+       4. sombra adaptativa — ganha opacidade sobre conteúdo, pra manter
+                              separação
+
+     A saturação alta é intencional e vem do material real: vidro
+     colorido deixa a cor do que está atrás "vazar" pra superfície.
+
+     Um princípio deles que respeitamos aqui: NÃO empilhar vidro sobre
+     vidro. Os cards são vidro; o que fica DENTRO deles usa fill/opacidade
+     simples, nunca outro backdrop-filter. */
+  --glass-bg: rgba(25, 29, 34, 0.6);
+  --glass-bg-hover: rgba(32, 37, 44, 0.7);
   --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-border-hover: rgba(255, 255, 255, 0.14);
+  --glass-border-hover: rgba(255, 255, 255, 0.16);
   /* Highlight do topo — a "quina iluminada" do vidro. */
-  --glass-top: rgba(255, 255, 255, 0.1);
-  --glass-blur: 18px;
-  --glass-saturate: 125%;
-  /* Sombra profunda e suave: eleva o card sem espalhar sujeira. */
-  --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.22);
-  --glass-shadow-hover: 0 18px 52px rgba(0, 0, 0, 0.4), 0 3px 10px rgba(0, 0, 0, 0.26);
-  /* Brilho de vidro interno (1px por dentro, no topo) — reforça a
-     sensação de espessura junto com --glass-top. */
-  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  --glass-top: rgba(255, 255, 255, 0.14);
+  --glass-blur: 20px;
+  --glass-saturate: 180%;
+
+  /* Sombra em duas camadas: uma de contato (curta, define a borda) e uma
+     ambiente (longa e suave, dá a altura). Mesma ideia da "shadow layer"
+     adaptativa do material da Apple. */
+  --glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 40px rgba(0, 0, 0, 0.34);
+  --glass-shadow-hover: 0 1px 2px rgba(0, 0, 0, 0.4), 0 20px 56px rgba(0, 0, 0, 0.44);
+
+  /* Specular highlight interno. São 3 linhas de 1px por dentro: topo
+     forte, esquerda média, base escura — simula luz vinda de cima e a
+     espessura do vidro na aresta oposta. É o detalhe que faz a diferença
+     entre "retângulo translúcido" e "peça de vidro". */
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 1px 0 0 rgba(255, 255, 255, 0.045),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.28);
+  --glass-inset-hover: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 1px 0 0 rgba(255, 255, 255, 0.07),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
 
   /* --- Glow ambiental de status ------------------------------------
      Luz difusa "atrás do vidro" no canto do card, não barra lateral nem
@@ -146,10 +166,17 @@ a {
   text-decoration: none;
 }
 
+/* Reset de botão. background/border entram aqui de propósito: sem eles, um
+   botão que esquecesse de declarar os dois herdava o chrome padrão do
+   navegador (fundo cinza claro, borda 3D) — bug real no "X" do modal de
+   imagem, que só declarava cor e virava um quadrado cinza no tema escuro.
+   Quem precisa de fundo/borda declara explicitamente. */
 button {
   font-family: inherit;
   cursor: pointer;
   color: inherit;
+  background: transparent;
+  border: none;
 }
 
 input,

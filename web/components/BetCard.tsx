@@ -108,6 +108,9 @@ export function BetCard({
         className={editando ? `${styles.card} ${styles.cardComEditor}` : styles.card}
         data-resultado={bet.resultado}
       >
+        {/* Lensing de borda do vidro (ver BetCard.module.css) — puramente
+            decorativo, precisa de elemento próprio por causa do mask. */}
+        <span className={styles.lensing} aria-hidden="true" />
         <div className={styles.topRow}>
           <span className={styles.statusInline} style={{ color: corResultado }}>
             <ResultadoIcon resultado={bet.resultado} />

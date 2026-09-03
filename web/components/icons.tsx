@@ -267,3 +267,24 @@ export function DownloadIcon({ color = "currentColor", size = 15 }: IconProps) {
     </svg>
   );
 }
+
+/** Duas folhas sobrepostas — "copiar". */
+export function CopyIcon({ color = "currentColor", size = 15 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+/** Caixa com seta saindo pra cima — "compartilhar" (share sheet do iOS). */
+export function ShareIcon({ color = "currentColor", size = 15 }: IconProps) {
+  return (
+    <svg {...base(size)} stroke={color}>
+      <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5" />
+      <path d="M16 7l-4-4-4 4" />
+      <path d="M12 3v13" />
+    </svg>
+  );
+}

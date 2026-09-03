@@ -47,19 +47,58 @@
   z-index: 0;
 }
 
-/* Iluminação do topo: faixa clara que decai rápido. É o que dá a leitura
-   de "vidro" sem clarear o card inteiro. */
+/* Camada de luz do vidro: specular highlight + lensing de borda.
+
+   O gradiente 180deg é o brilho de superfície (luz vinda de cima). O
+   `mask` em volta recorta uma moldura de ~1.5px onde mora o lensing — a
+   luz entortando na aresta, que no material da Apple é o que dá espessura
+   e é mais pronunciada nas quinas. Sem isso o card lê como retângulo
+   translúcido, não como peça de vidro. */
 .card::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 45%);
+  border-radius: inherit;
+  /* Brilho de superfície: só no topo, decaindo rápido. */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 42%);
   z-index: 0;
 }
 
-/* Conteúdo acima das camadas de luz. */
-.card > * {
+/* Lensing de borda — moldura de 1.5px recortada por mask, com a luz mais
+   forte nas quinas superior-esquerda e inferior-direita (luz de cima
+   entortando na aresta). Fica num elemento próprio porque `mask` recorta
+   TODO o background da camada; aplicá-lo no ::after apagaria o brilho de
+   superfície acima. */
+.lensing {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.22),
+    rgba(255, 255, 255, 0.02) 30%,
+    rgba(255, 255, 255, 0.02) 68%,
+    rgba(255, 255, 255, 0.12)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.9;
+  transition: opacity 0.18s ease;
+  z-index: 0;
+}
+
+.card:hover .lensing {
+  opacity: 1;
+}
+
+/* Conteúdo acima das camadas de luz. O :not() preserva a camada de
+   lensing no fundo — ela é filha do card mas não é conteúdo. */
+.card > *:not(.lensing) {
   position: relative;
   z-index: 1;
 }
@@ -88,7 +127,7 @@
   background: var(--glass-bg-hover);
   border-color: var(--glass-border-hover);
   border-top-color: var(--glass-border-hover);
-  box-shadow: var(--glass-shadow-hover), var(--glass-inset);
+  box-shadow: var(--glass-shadow-hover), var(--glass-inset-hover);
   transform: translateY(-2px);
 }
 

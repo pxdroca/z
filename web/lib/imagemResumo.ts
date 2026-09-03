@@ -280,16 +280,22 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
   return canvas;
 }
 
-/** Converte o canvas em blob PNG e devolve como object URL, pronto pra usar
- *  em <img src> (preview) ou num link de download. */
-export function canvasParaObjectUrl(canvas: HTMLCanvasElement): Promise<string> {
+/** Converte o canvas em blob PNG. O blob (e não só o object URL) é o que
+ *  as APIs de clipboard e de compartilhamento exigem. */
+export function canvasParaBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
         reject(new Error("Falha ao gerar a imagem."));
         return;
       }
-      resolve(URL.createObjectURL(blob));
+      resolve(blob);
     }, "image/png");
   });
+}
+
+/** Converte o canvas em blob PNG e devolve como object URL, pronto pra usar
+ *  em <img src> (preview) ou num link de download. */
+export async function canvasParaObjectUrl(canvas: HTMLCanvasElement): Promise<string> {
+  return URL.createObjectURL(await canvasParaBlob(canvas));
 }
