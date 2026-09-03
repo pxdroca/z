@@ -379,6 +379,14 @@ def _normaliza_numero_set(numero: str) -> str:
 
 _FAVORITO_IGNORE_WORDS = {
     "aposta", "ao", "vivo", "live", "odd", "cota", "green", "red", "tip",
+    # Pronomes/artigos/verbos comuns que aparecem capitalizados no início
+    # de frase (maiúscula de início de sentença, não nome próprio) e que o
+    # regex greedy de find_favorite_only não distingue de um nome de
+    # jogador de verdade — bug real visto em produção 2x: "Aquela odd 100
+    # marota vai ficar pra amanhã" e "montei uma odd 100 pra quem quiser
+    # sonhar" viraram jogador1="Aquela"/"montei uma" (ambos comentários
+    # sobre uma múltipla futura, não uma tip com nome de jogador nenhum).
+    "aquela", "aquele", "essa", "esse", "isso", "uma", "um", "montei",
 }
 
 
