@@ -48,14 +48,27 @@ function StatusPartidaIcon({ status }: { status: BetStatus }) {
   }
 }
 
+/**
+ * Formata a data/hora do jogo SEMPRE no horário de Brasília.
+ *
+ * getDate()/getHours() usam o fuso do NAVEGADOR, não o do usuário do
+ * painel — bug real: um jogo gravado às 07:00 BRT aparecia como 06:00
+ * num navegador em UTC-4. Todo o resto do sistema (filtro padrão em
+ * page.tsx, imagem-resumo, pipeline Python) já fixa America/Sao_Paulo;
+ * este era o único ponto que ainda dependia da máquina de quem olha.
+ */
 function formatarData(isoString: string | null): string {
   if (!isoString) return "—";
-  const d = new Date(isoString);
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const hora = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  return `${dia}/${mes} · ${hora}:${min}`;
+  const partes = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(isoString));
+  const p = (tipo: string) => partes.find((x) => x.type === tipo)?.value ?? "--";
+  return `${p("day")}/${p("month")} · ${p("hour")}:${p("minute")}`;
 }
 
 /** "6-3, 2-6, 2-6" -> "6–3 · 2–6 · 2–6" (traço meia-risca + separador
