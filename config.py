@@ -72,9 +72,9 @@ class Settings:
     GEMINI_MODEL: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-flash-latest"))
 
     # --- Banco de dados / mídia ---
-    # Connection string do Postgres (Neon) — usada tanto local quanto em
-    # produção (GitHub Actions + Streamlit Cloud). Obrigatória: database.py
-    # não tem mais fallback SQLite.
+    # Connection string do Postgres (Supabase) — usada tanto local quanto
+    # em produção (GitHub Actions). Obrigatória: database.py não tem mais
+    # fallback SQLite. O painel Next.js tem a sua própria (com pooler).
     DATABASE_URL: str = field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
     MEDIA_DIR: str = field(default_factory=lambda: os.getenv("MEDIA_DIR", "media"))
 

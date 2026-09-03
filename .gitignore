@@ -24,9 +24,6 @@ logs/
 *.log
 media/
 
-# Streamlit
-.streamlit/secrets.toml
-
 # OS
 .DS_Store
 Thumbs.db

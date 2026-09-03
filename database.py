@@ -2,13 +2,13 @@
 database.py
 ===========
 Camada de acesso ao Postgres (Neon). Único módulo que executa SQL —
-listener.py, app.py, matcher.py etc. só chamam estas funções.
+listener.py, matcher.py etc. só chamam estas funções.
 
-Postgres via Neon foi escolhido na migração pra nuvem gratuita porque
+Postgres (hoje Supabase) foi escolhido na migração pra nuvem gratuita porque
 persiste entre execuções (diferente de storage efêmero de PaaS grátis) e é
-acessível tanto pelos workflows do GitHub Actions (que escrevem) quanto pelo
-Streamlit Cloud (que lê) — bastando compartilhar a connection string
-(DATABASE_URL).
+acessível tanto pelos workflows do GitHub Actions (que escrevem, via conexão
+direta na 5432) quanto pelo painel Next.js na Vercel (que lê/edita, via
+pooler na 6543) — bastando compartilhar a connection string.
 """
 
 from __future__ import annotations

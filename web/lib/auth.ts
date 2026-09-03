@@ -1,6 +1,6 @@
 // Autenticação simples: uma senha única compartilhada (não contas
-// individuais — decisão do usuário, já que hoje o Streamlit também é
-// público sem senha, só precisa de uma barreira mínima). O cookie guarda
+// individuais — decisão do usuário; o painel Streamlit anterior era
+// público sem senha nenhuma, então basta uma barreira mínima). O cookie guarda
 // uma assinatura HMAC-SHA256 de um valor fixo + a senha, não a senha em
 // si nem um segredo derivável — comparação em tempo constante evita
 // timing attack na checagem.

@@ -31,8 +31,9 @@ rapidfuzz==3.9.7          # fuzzy-matching dos nomes dos tenistas
 beautifulsoup4==4.12.3
 
 # --- Dashboard web ---------------------------------------------------------------
-streamlit==1.40.2
-pandas==2.2.3  # 2.2.2 não tem wheel pronto pra versões recentes de Python (Streamlit Cloud) — compila do source e falha
+# O painel deixou de ser Python: virou um app Next.js em web/ (hospedado na
+# Vercel), que fala com o mesmo Postgres via `pg`. streamlit e pandas eram
+# usados só pelo app.py antigo e foram removidos junto com ele.
 
 # --- Utilidades gerais ------------------------------------------------------------
 python-dotenv==1.0.1
