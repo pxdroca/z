@@ -69,19 +69,22 @@
      viewport (o container do header tem padding próprio) — "right: 0"
      relativo ao wrapper deslocava o painel (quase tão largo quanto a
      tela) pra fora da borda esquerda. Em vez de ancorar no trigger
-     (exigiria calcular a posição dele via JS), vira uma folha fixa no
-     rodapé da viewport — "bottom" não depende de onde o botão está,
-     só da tela em si, então nunca vaza pra fora independente da
+     (exigiria calcular a posição dele via JS), vira uma folha fixa
+     ancorada no TOPO da viewport — perto de onde o botão "Filtros" de
+     fato fica (topo da página), diferente da 1ª tentativa (ancorada no
+     rodapé), que o usuário corretamente achou sem sentido com o botão
+     lá em cima. "top"/"left"/"right" fixos não dependem de onde o botão
+     está, só da tela em si, então nunca vaza pra fora independente da
      largura do wrapper/container. */
   .panel {
     position: fixed;
-    top: auto;
+    top: 4.5rem;
     left: 1rem;
     right: 1rem;
-    bottom: 1rem;
+    bottom: auto;
     width: auto;
     max-width: none;
-    max-height: calc(100vh - 2rem);
+    max-height: calc(100vh - 6rem);
     overflow-y: auto;
   }
 }

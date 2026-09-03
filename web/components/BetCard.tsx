@@ -50,9 +50,10 @@ function ResultadoIcon({ resultado }: { resultado: ResultadoAposta }) {
     case "cashout":
       return <CoinIcon color="var(--amber)" />;
     default:
-      // Rotação suave e contínua — pedido do usuário ("movimento de
-      // rotação de uma ampulheta, movimento suave").
-      return <HourglassIcon color="var(--lime)" spin />;
+      // Parada (usuário achou o giro contínuo pouco elaborado/não gostou
+      // do resultado — reverte pra ícone estático até pensarmos numa
+      // animação mais trabalhada).
+      return <HourglassIcon color="var(--lime)" />;
   }
 }
 
@@ -108,14 +109,7 @@ export function BetCard({
   return (
     <div>
       <div className={cardClasse}>
-        <button
-          className={styles.editButton}
-          onClick={() => setEditando((v) => !v)}
-          aria-label={editando ? "Fechar edição" : "Editar status/resultado"}
-          title={editando ? "Fechar edição" : "Editar status/resultado"}
-        >
-          {editando ? <XIcon /> : <PencilIcon />}
-        </button>
+        <div className={styles.torneio}>{bet.torneio || "Torneio não identificado"}</div>
 
         <div className={styles.headerRow}>
           <div className={styles.jogo}>{bet.jogo}</div>
@@ -128,10 +122,16 @@ export function BetCard({
               <ResultadoIcon resultado={bet.resultado} />
               {RESULTADO_LABEL[bet.resultado]}
             </span>
+            <button
+              className={styles.editButton}
+              onClick={() => setEditando((v) => !v)}
+              aria-label={editando ? "Fechar edição" : "Editar status/resultado"}
+              title={editando ? "Fechar edição" : "Editar status/resultado"}
+            >
+              {editando ? <XIcon /> : <PencilIcon />}
+            </button>
           </div>
         </div>
-
-        <div className={styles.torneio}>{bet.torneio || "Torneio não identificado"}</div>
 
         <div className={styles.mercadoLabel}>Mercado</div>
         <div className={styles.mercadoValor}>{bet.mercado || "Mercado não identificado"}</div>

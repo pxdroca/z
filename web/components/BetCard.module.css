@@ -35,6 +35,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
+  margin-bottom: 0.7rem;
 }
 
 .jogo {
@@ -42,13 +43,16 @@
   font-weight: 700;
   font-size: 1.25rem;
   line-height: 1.25;
-  margin-bottom: 0.15rem;
 }
 
+/* Campeonato/local acima do nome dos jogadores (pedido do usuário) — label
+   discreto, mesmo padrão visual do "MERCADO" mais abaixo no card. */
 .torneio {
   color: var(--muted);
-  font-size: 0.88rem;
-  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.3rem;
 }
 
 .mercadoLabel {
@@ -118,16 +122,17 @@
   color: var(--muted);
 }
 
+/* Badges de status/resultado e o botão de lápis juntos, lado a lado numa
+   única linha (não mais empilhados verticalmente com o lápis flutuando
+   separado por cima) — pedido do usuário: "melhore a parte ali dos
+   badges e botão de editar", achava que ficava "separado". */
 .badgesRow {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  justify-content: flex-end;
+  gap: 0.4rem;
   flex-shrink: 0;
-  /* Espaço reservado pro botão de lápis sobreposto (.editButton) não
-     colidir com os badges. */
-  padding-right: 1.8rem;
 }
 
 .statusBadge,
@@ -181,16 +186,12 @@
   color: var(--amber);
 }
 
-/* Botão de lápis/fechar — real, dentro do fluxo do JSX, sobreposto ao
-   canto superior direito do card via position:absolute simples (sem
-   precisar neutralizar nenhum wrapper intermediário, diferente do
-   Streamlit). */
+/* Botão de lápis/fechar — agora dentro do fluxo normal do .badgesRow
+   (lado a lado com os badges), não mais sobreposto via position:absolute
+   solto por cima do card. */
 .editButton {
-  position: absolute;
-  top: 1.1rem;
-  right: 1.3rem;
-  width: 1.7rem;
-  height: 1.7rem;
+  width: 1.6rem;
+  height: 1.6rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -199,6 +200,7 @@
   border-radius: 6px;
   color: var(--muted);
   opacity: 0.75;
+  flex-shrink: 0;
   transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 
@@ -277,12 +279,22 @@
 
 @media (max-width: 640px) {
   .card {
-    padding: 0.85rem 0.9rem;
+    padding: 1rem 1rem 1.1rem;
   }
   .jogo {
     font-size: 1.08rem;
   }
+  .headerRow {
+    margin-bottom: 0.85rem;
+  }
+  .mercadoValor {
+    margin-bottom: 1rem;
+  }
   .infoRow {
     gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .bookmakerRow {
+    gap: 0.5rem;
   }
 }

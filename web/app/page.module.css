@@ -115,5 +115,13 @@
 
   .cardsGrid {
     grid-template-columns: 1fr;
+    gap: 1.4rem;
+  }
+
+  /* Mais respiro antes de cada seção de status e entre os cards — pedido
+     do usuário ("tudo muito junto" no mobile), agora com mais liberdade
+     pra ajustar espaçamento livremente. */
+  .secaoStatus {
+    margin: 2rem 0 1rem;
   }
 }
