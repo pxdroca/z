@@ -24,8 +24,14 @@ Calibrado ao vivo em 02/09/2026 contra:
   - homeCompetitor/awayCompetitor têm "name" (sem acentos às vezes, ex:
     "Alex Molcan" vs "Alex Molčan" do SofaScore — nameutils.pair_matches já
     normaliza acentos, então isso não deveria ser problema pro fuzzy-match).
-  - statusText: "Fim" quando terminado, texto livre tipo "2º set"/"Ao vivo"
-    quando em andamento, ou algo tipo horário quando ainda não começou.
+  - statusText: "Fim" quando terminado, "Programação" quando agendado,
+    texto livre tipo "1º set"/"2º set" quando em andamento.
+  - statusGroup é o campo confiável pra saber a fase do jogo. Levantado
+    sobre os 92 jogos de tênis de 03/09/2026 (ver _STATUS_GROUP_*):
+        grp=2 -> agendado      ("Programação"), 88 jogos
+        grp=3 -> em andamento  ("1º set"/"2º set"/"3º set"), 3 jogos
+        grp=4 -> encerrado/cancelado ("Cancelado"), 1 jogo
+    Não foi observado grp=1 em nenhum jogo.
   - stages: lista com 1 entrada por set (name="1º set".."5º set") mais
     entradas agregadas (name="Sets", "Game") — filtra-se pelas que batem
     com o padrão "Nº set" pra montar o placar final.
@@ -61,6 +67,21 @@ _USER_AGENT = (
 )
 
 _SET_STAGE_PATTERN = re.compile(r"^(\d)º set$")
+
+# statusGroup do 365scores -> fase do jogo. Levantado sobre os 92 jogos de
+# tênis de 03/09/2026 (ver docstring do módulo).
+#
+# Bug real que isto corrige: o código antes tratava só `statusGroup == 1`
+# como "não começou" (um chute, comentado no próprio código como "não
+# confirmado formalmente") e mandava TODO o resto pro `else` = "em
+# andamento". Como o valor real de jogo agendado é 2, as 6 apostas do dia
+# viraram "ao vivo" às 02h da manhã — jogos que só começavam às 09:00.
+# Ninguém notou antes porque isto só roda quando o SofaScore falha, e o
+# SofaScore bloqueia o IP do runner do GitHub Actions com 403 justamente
+# em produção (onde nenhum humano lê o log em tempo real).
+_STATUS_GROUP_AGENDADO = 2
+_STATUS_GROUP_EM_ANDAMENTO = 3
+_STATUS_GROUP_ENCERRADO = 4
 
 
 def _run_with_browser(fn):
@@ -120,12 +141,27 @@ def _game_to_status(game: dict) -> EventStatus:
     away = game.get("awayCompetitor") or {}
     status_text = (game.get("statusText") or "").strip().lower()
 
+    grupo = game.get("statusGroup")
     if status_text == "fim":
         status = "finished"
-    elif game.get("statusGroup") == 1:  # não confirmado formalmente, mas
-        status = "notstarted"           # statusGroup 1 = agendado nos testes
-    else:
+    elif grupo == _STATUS_GROUP_EM_ANDAMENTO:
         status = "inprogress"
+    elif grupo == _STATUS_GROUP_ENCERRADO:
+        # Encerrado sem ser "Fim" (ex: "Cancelado", W.O.). Não é
+        # "inprogress", e tratar como finished sem vencedor deixa o
+        # resultado_checker decidir em vez de inventar um green/red.
+        status = "finished"
+    else:
+        # Agendado (grupo 2) e qualquer valor novo/desconhecido. O default
+        # seguro é "não começou": marcar um jogo como ao vivo por engano
+        # trava a aposta num estado errado no painel, enquanto tratar um
+        # jogo ao vivo como agendado se resolve no ciclo seguinte.
+        if grupo is not None and grupo != _STATUS_GROUP_AGENDADO:
+            logger.warning(
+                "365scores: statusGroup=%r desconhecido (statusText=%r) — assumindo que não começou.",
+                grupo, game.get("statusText"),
+            )
+        status = "notstarted"
 
     vencedor = None
     if status == "finished":
