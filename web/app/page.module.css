@@ -1,0 +1,79 @@
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 3rem;
+}
+
+.headerRow {
+  display: grid;
+  grid-template-columns: 5fr 1fr;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.appHeader {
+  font-family: "Archivo", sans-serif;
+  font-weight: 800;
+  font-size: 2.1rem;
+  letter-spacing: -0.02em;
+}
+
+.secaoStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: "Archivo", sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin: 1.4rem 0 0.7rem;
+}
+
+.secaoStatusCount {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.2rem;
+}
+
+.emptyState {
+  color: var(--muted);
+  padding: 2rem 0;
+}
+
+.loadingState {
+  color: var(--muted);
+  padding: 2rem 0;
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 0.75rem 1rem 2rem;
+  }
+
+  /* Pedido do usuário: título centralizado e mais pra cima no mobile,
+     pra não ficar grudado no botão de Filtros — em vez da mesma linha
+     lado a lado do desktop, empilha com o título primeiro. */
+  .headerRow {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    margin-top: -0.5rem;
+    margin-bottom: 0.75rem;
+    gap: 0.6rem;
+  }
+
+  .appHeader {
+    font-size: 1.6rem;
+  }
+
+  .cardsGrid {
+    grid-template-columns: 1fr;
+  }
+}
