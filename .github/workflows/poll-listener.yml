@@ -1,12 +1,25 @@
 name: Poll Telegram listener
 
 on:
+  # Gatilho PRINCIPAL: um cron externo (cron-job.org) chama a API de
+  # repository_dispatch do GitHub com este event_type. Motivo: o
+  # agendador de `schedule` do GitHub é best-effort e nunca entregou os
+  # 5 minutos configurados neste repositório — medido no histórico real,
+  # os intervalos variaram de 8 a 32 min no melhor caso, e chegaram a
+  # ficar 90 min sem disparar nenhuma vez. Como o pipeline serve
+  # notificação de aposta ao vivo, esse atraso é o próprio problema.
+  repository_dispatch:
+    types: [poll-listener]
+
+  # Mantido como REDE DE SEGURANÇA: se o serviço externo cair, o cron do
+  # GitHub ainda dispara (irregular, mas melhor que nada). Não remover.
   schedule:
     # A cada 5 min — só é sustentável de graça porque este repositório é
     # público (Actions em repositório privado tem limite mensal de minutos
     # que essa cadência estouraria por causa do arredondamento de cobrança
     # do GitHub pra minuto cheio).
     - cron: "*/5 * * * *"
+
   workflow_dispatch: {}
 
 jobs:

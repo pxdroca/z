@@ -1,10 +1,19 @@
 name: Update live scores
 
 on:
+  # Gatilho PRINCIPAL: cron externo (cron-job.org) via API de
+  # repository_dispatch — ver poll-listener.yml para o porquê (o
+  # agendador de `schedule` do GitHub nunca entregou a cadência
+  # configurada neste repositório).
+  repository_dispatch:
+    types: [score-updater]
+
+  # Rede de segurança caso o serviço externo caia. Não remover.
   schedule:
     # A cada 5 min — mesmo raciocínio do workflow poll-listener.yml (só cabe
     # de graça porque o repositório é público).
     - cron: "*/5 * * * *"
+
   workflow_dispatch: {}
 
 jobs:
