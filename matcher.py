@@ -94,17 +94,53 @@ def buscar_confronto_na_superbet(nome: str, esporte: str = Esporte.TENIS.value) 
             (j1, j2) for j1, j2, _ in confrontos
             if _lado_confere(j1) or _lado_confere(j2)
         ]
-        if len(plausiveis) == 1:
-            j1, j2 = plausiveis[0]
+
+        # Descarta jogos de DUPLAS antes de decidir. O tipster aposta em
+        # simples, e um tenista costuma ter simples e duplas no mesmo dia —
+        # então "2 plausíveis" quase sempre é "o jogo certo + a dupla dele",
+        # não uma ambiguidade real.
+        #
+        # Bug real (03/09/2026): quase todas as tips do dia caíram em
+        # "não encontrada" por isso. "Bucsa" trazia
+        # "Cristina Bucsa x Himeno Sakatsume" (o jogo certo) junto de
+        # "V.Golubic/S.Waltert x C.Bucsa/N.Melichar-Martinez" (duplas), o
+        # código via 2 e desistia. Mesma coisa com "Buse". Nomes sem duplas
+        # no dia (Popyrin, Khachanov, Svrcina, Michael Zheng) passavam —
+        # daí a falha parecer intermitente.
+        #
+        # A Superbet escreve duplas como "A.Sobrenome/B.Sobrenome", então a
+        # barra é o sinal, e é bem mais confiável que contar palavras.
+        simples = [(j1, j2) for j1, j2 in plausiveis if "/" not in j1 and "/" not in j2]
+        if len(simples) == 1:
+            j1, j2 = simples[0]
+            if len(plausiveis) > 1:
+                logger.info(
+                    "Superbet: %d confrontos para %r, %d de simples — usando o de simples.",
+                    len(plausiveis), variante, len(simples),
+                )
             logger.info(
                 "Superbet confirmou (busca por %r): %s x %s", variante, j1, j2,
             )
             return j1, j2
-        if len(plausiveis) > 1:
+
+        if len(simples) > 1:
+            # Ambiguidade de verdade: dois jogos de simples batendo com o
+            # mesmo nome (homônimos). Aqui desistir é o certo — chutar
+            # gravaria a aposta no confronto errado.
             logger.info(
-                "Superbet: %d confrontos plausíveis para %r (%s) — ambíguo, não vou escolher.",
-                len(plausiveis), variante,
-                "; ".join(f"{a} x {b}" for a, b in plausiveis[:4]),
+                "Superbet: %d jogos de simples plausíveis para %r (%s) — ambíguo, não vou escolher.",
+                len(simples), variante,
+                "; ".join(f"{a} x {b}" for a, b in simples[:4]),
+            )
+            return None
+
+        if plausiveis:
+            # Só sobrou duplas. Não serve pra confirmar uma aposta de
+            # simples, e passar isso adiante gravaria o confronto errado
+            # (foi assim que "Hara friend" pegou uma dupla antes).
+            logger.info(
+                "Superbet: só achei jogos de duplas para %r (%s) — ignorando.",
+                variante, "; ".join(f"{a} x {b}" for a, b in plausiveis[:4]),
             )
             return None
 
