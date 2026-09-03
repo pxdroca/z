@@ -43,3 +43,38 @@ def pair_matches(j1: str, j2: str, c1: str, c2: str, threshold: int) -> bool:
     direto = names_match(j1, c1, threshold) and names_match(j2, c2, threshold)
     invertido = names_match(j1, c2, threshold) and names_match(j2, c1, threshold)
     return direto or invertido
+
+
+def search_variants(nome: str) -> list[str]:
+    """Variações de um nome pra tentar em busca textual, da mais específica
+    pra mais genérica e sem repetir.
+
+    Motivo (03/09/2026): o tipster escreveu "Alexandra muller" onde o
+    jogador é "Alexandre Muller". A busca da Superbet é textual e não
+    tolera o erro — "Alexandra muller" devolve 0 resultados —, mas só o
+    sobrenome ("Muller") devolve o confronto certo. Buscar o nome inteiro
+    e, se falhar, cair pro sobrenome recupera o erro de digitação sem
+    afrouxar o limiar de comparação, que é o que causaria falso positivo.
+
+    Só o sobrenome, nunca só o primeiro nome: testando "Alexandra muller",
+    a variante "alexandra" trouxe "Alexandra Eala" e o fuzzy aceitou (o
+    primeiro nome bate inteiro) — jogadora errada, confronto errado. Em
+    tênis o sobrenome é o que discrimina; primeiro nome sozinho é ruído.
+    """
+    nome = (nome or "").strip()
+    if not nome:
+        return []
+
+    partes = [p for p in normalize_name(nome).split() if len(p) > 2]
+    variantes = [nome]
+    if len(partes) > 1:
+        variantes.append(partes[-1])   # sobrenome
+
+    vistos: set[str] = set()
+    unicas = []
+    for v in variantes:
+        chave = normalize_name(v)
+        if chave and chave not in vistos:
+            vistos.add(chave)
+            unicas.append(v)
+    return unicas

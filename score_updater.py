@@ -157,6 +157,21 @@ def _processar_bet(bet: Bet, evt: EventStatus) -> None:
             logger.info("Aposta #%s: partida começou (ao vivo).", bet.id)
         update_score_result(bet.id, status=novo_status, placar_final=evt.placar)
 
+    elif evt.status == "notstarted" and bet.status == BetStatus.AO_VIVO.value:
+        # Corrige um "ao vivo" que não corresponde à realidade. Acontecia de
+        # verdade (03/09/2026): enquanto o data_hora era gravado no fuso da
+        # máquina (ver _extract_event em sofascore_client.py), jogos de
+        # manhã entravam como já começados e eram promovidos a ao_vivo; o
+        # SofaScore dizia "notstarted", mas este ramo só logava em debug,
+        # então o status errado ficava grudado pra sempre no painel — 4
+        # jogos apareciam "ao vivo" de madrugada, um deles com 8h de
+        # antecedência. A promoção era irreversível; agora não é.
+        logger.info(
+            "Aposta #%s: SofaScore diz que ainda não começou — revertendo ao_vivo para agendada.",
+            bet.id,
+        )
+        update_score_result(bet.id, status=BetStatus.AGENDADA.value)
+
     else:
         logger.debug("Aposta #%s: sem mudança (status SofaScore=%s)", bet.id, evt.status)
 

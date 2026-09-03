@@ -183,6 +183,23 @@ class SuperbetAdapter(BookmakerAdapter):
         if not self._safe_goto(page, url):
             return []
 
+        # Espera os cards renderizarem. A busca é uma SPA Vue: o goto
+        # retorna com a casca da página pronta e os resultados chegam por
+        # XHR depois. Lendo o DOM na hora, a mesma busca dava 2 resultados
+        # ou 0 de forma alternada — medido em 03/09/2026, ~1 em 3 chamadas
+        # vinha vazia. Como a validação cruzada de matcher.py depende desta
+        # busca, esse "vazio" intermitente virava jogo não confirmado (ou,
+        # pior, confirmado pela fonte errada) sem nenhum erro no log.
+        #
+        # Timeout curto e engolido de propósito: "nenhum resultado" é uma
+        # resposta legítima (jogador sem jogo aberto), e nesse caso o
+        # seletor nunca aparece — não é erro, é a resposta.
+        try:
+            page.wait_for_selector(_SELECTORS["match_card"], timeout=8000)
+        except Exception:
+            logger.debug("superbet: busca por %r não renderizou cards (sem resultados?).", termo)
+            return []
+
         matches: list[_RawMatch] = []
         for card in page.query_selector_all(_SELECTORS["match_card"]):
             href = card.get_attribute("href")
@@ -201,6 +218,22 @@ class SuperbetAdapter(BookmakerAdapter):
             horario_texto = horario_el.inner_text().strip() if horario_el else ""
             matches.append(_RawMatch(jogador1=jogador1, jogador2=jogador2, horario_texto=horario_texto, link=urljoin(url, href)))
         return matches
+
+    def buscar_confrontos(self, termo: str) -> list[tuple[str, str, str]]:
+        """Confrontos de tênis que a busca da Superbet devolve para `termo`,
+        como (jogador1, jogador2, link).
+
+        Existe para a validação cruzada em matcher.confirmar_confronto: a
+        Superbet lista SÓ jogos futuros/abertos pra aposta, então servir de
+        segunda opinião resolve de graça dois erros que o SofaScore sozinho
+        comete — devolver um jogo antigo (o featured-event de um perfil
+        desatualizado) e casar com um homônimo que não joga hoje.
+        """
+        if not termo:
+            return []
+        def _buscar(page):
+            return [(c.jogador1, c.jogador2, c.link) for c in self._search(page, termo)]
+        return self._run_with_browser(_buscar) or []
 
     def find_exact_link(self, jogador1, jogador2, torneio, data_hora):
         threshold = settings.SUPERBET_FUZZY_THRESHOLD
