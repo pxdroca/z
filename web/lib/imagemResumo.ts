@@ -153,9 +153,11 @@ function desenharEstatisticas(ctx: CanvasRenderingContext2D, jogos: Bet[], y: nu
       cor: stats.unidadesLiquidas >= 0 ? "#34d399" : "#f87171",
     },
     {
+      // Sem linha secundária: green e red já estão nas duas primeiras
+      // colunas, então "3/13" era a mesma informação uma terceira vez.
       label: "TAXA DE ACERTO",
       valor: stats.taxaAcerto !== null ? `${stats.taxaAcerto.toFixed(0)}%` : "—",
-      sub: stats.green + stats.red > 0 ? `${stats.green}/${stats.green + stats.red}` : null,
+      sub: null,
       cor: "#a78bfa",
     },
   ];
@@ -189,8 +191,8 @@ function desenharEstatisticas(ctx: CanvasRenderingContext2D, jogos: Bet[], y: nu
 
     if (col.sub) {
       ctx.fillStyle = "#6b7280";
-      ctx.font = "500 20px Inter, sans-serif";
-      ctx.fillText(col.sub, cx, y + 108);
+      ctx.font = "500 17px Inter, sans-serif";
+      ctx.fillText(col.sub, cx, y + 106);
     }
   });
 
@@ -296,11 +298,11 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
     const larguraBadge = 190;
     const larguraTexto = LARGURA - PAD - xTexto - larguraBadge - 24;
 
-    // horário — 30px (era 22) e em text-secondary (era muted): é a
-    // primeira coisa que se procura na imagem ("que jogo é agora?") e
-    // ficava menor E mais apagado que o mercado, que é secundário.
+    // horário — 26px e em text-secondary. Era 22px/muted (menor e mais
+    // apagado que o mercado, que é secundário); 30px passou do ponto e
+    // competia com o nome do confronto.
     ctx.fillStyle = "#a1a7b3";
-    ctx.font = "700 30px 'JetBrains Mono', monospace";
+    ctx.font = "700 26px 'JetBrains Mono', monospace";
     ctx.fillText(bet.data_hora ? formatarHora(bet.data_hora) : "--:--", xTexto, cyCentro - 24);
 
     // confronto (jogo)

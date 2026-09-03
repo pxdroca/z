@@ -78,6 +78,23 @@
      simples, nunca outro backdrop-filter. */
   --glass-bg: rgba(25, 29, 34, 0.6);
   --glass-bg-hover: rgba(32, 37, 44, 0.7);
+
+  /* Vidro GROSSO — para superfícies que precisam se impor sobre o
+     conteúdo: dock flutuante, popover de filtros, painel de imagem.
+     Na Apple os elementos maiores/mais "pesados" refratam mais e
+     escurecem o que está atrás, justamente pra o conteúdo de trás não
+     embaralhar o que está na frente. O vidro fino (--glass-bg) é pro
+     card, que fica APOIADO na página e pode deixar o fundo aparecer;
+     estes ficam SOBRE ela. */
+  /* 0.985: medido na tela — em 0.90 e 0.96 os títulos dos cards ainda
+     liam através do painel de filtros e embaralhavam as opções. Num fundo
+     escuro o blur difunde pouco (falta contraste pra espalhar), então
+     quem separa as camadas é a opacidade; o blur e a saturação ficam pra
+     dar o "material" e capturar a cor do que passa atrás.
+     É o vidro "grosso" da Apple: quanto mais pesada a superfície, mais
+     ela refrata e escurece o fundo, justamente pra não embaralhar. */
+  --glass-thick-bg: rgba(20, 23, 27, 0.985);
+  --glass-thick-blur: 44px;
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-border-hover: rgba(255, 255, 255, 0.16);
   /* Highlight do topo — a "quina iluminada" do vidro. */
@@ -189,6 +206,23 @@ select {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Mata o flash azul que o WebKit/Chrome desenham sobre qualquer elemento
+   tocável no toque e no clique. Era o "pisca azul" que aparecia ao trocar
+   de aba de status e estragava a transição da pílula — vinha do
+   navegador, não do nosso CSS. O feedback de toque fica por conta dos
+   nossos próprios estados de hover/active. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Sem realce de seleção nos controles (só o texto de conteúdo deve
+   selecionar) — clique duplo numa aba não deve pintar o rótulo. */
+button,
+[role="tab"] {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Pulso do indicador "ao vivo": halo transparente cresce e desvanece

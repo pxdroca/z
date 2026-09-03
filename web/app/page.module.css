@@ -247,13 +247,20 @@
     justify-content: center;
     gap: 0.35rem;
     padding: 0.4rem;
-    background: var(--glass-bg);
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-    border: 1px solid var(--glass-border);
+    /* Vidro GROSSO: blur alto + fundo bem mais opaco. O dock flutua SOBRE
+       o conteúdo, então precisa escurecer e desfocar forte o que passa
+       atrás — com o vidro fino dos cards, os cards apareciam através da
+       barra e embaralhavam os ícones. É a mesma lógica do material da
+       Apple, onde os elementos maiores refratam mais. */
+    background: var(--glass-thick-bg);
+    backdrop-filter: blur(var(--glass-thick-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-thick-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border-hover);
     border-top-color: var(--glass-top);
     border-radius: var(--radius-full);
-    box-shadow: var(--glass-shadow), var(--glass-inset);
+    /* Sombra mais funda que a dos cards + o inset de espessura: o dock
+       tem que parecer a camada mais alta da tela. */
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35), var(--glass-inset);
   }
 
   /* Vidro sobre vidro: tudo dentro do dock perde fundo/borda próprios e a
@@ -279,7 +286,7 @@
 
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .headerAcoes {
-      background: var(--surface-solid);
+      background: #16191d;
     }
   }
 }

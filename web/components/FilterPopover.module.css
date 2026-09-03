@@ -72,14 +72,25 @@
   width: 20rem;
   max-width: calc(100vw - 2rem);
   padding: 1rem;
-  background: rgba(21, 24, 28, 0.92);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-strong);
+  /* Vidro GROSSO (ver --glass-thick-* em globals.css). O painel flutua
+     SOBRE os cards, e com 0.92/20px eles ainda liam através dele — num
+     fundo escuro o blur tem pouco contraste pra difundir, então o que
+     separa é a opacidade. */
+  background: var(--glass-thick-bg);
+  backdrop-filter: blur(var(--glass-thick-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-thick-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border-hover);
+  border-top-color: var(--glass-top);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.55), var(--glass-inset);
   animation: panel-in 0.16s var(--ease);
   transform-origin: top right;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .panel {
+    background: #16191d;
+  }
 }
 
 .sectionLabel {
@@ -168,8 +179,10 @@
     position: fixed;
     top: auto;
     bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
-    left: 1rem;
-    right: 1rem;
+    /* Quase a largura toda: o painel estava estreito (herdava as 20rem do
+       desktop) e as opções ficavam apertadas num canto da tela. */
+    left: 0.75rem;
+    right: 0.75rem;
     width: auto;
     max-width: none;
     max-height: calc(100vh - 12rem);

@@ -50,29 +50,38 @@
   align-items: center;
   justify-content: center;
   padding: 1.25rem;
-  /* Escurece bem o fundo: o diálogo é modal, precisa isolar do resto. */
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  /* Overlay bem escuro + blur: o modal precisa isolar de verdade, e com
+     0.72 os cards de trás ainda liam através do vidro do diálogo. */
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   animation: overlay-in 0.16s var(--ease);
   overflow-y: auto;
 }
 
-/* Superfície SÓLIDA, deliberadamente diferente dos cards. O vidro
-   translúcido serve pra card apoiado na página; num modal ele deixou os
-   cards de trás vazarem por cima dos campos e o formulário ficou
-   ilegível (visto em teste). Aqui a hierarquia pede opacidade. */
+/* Vidro grosso, igual ao painel de imagem e ao popover de filtros — os
+   três são superfícies que ficam SOBRE o conteúdo. Antes era sólido
+   (--surface-solid) porque a versão fina deixava os cards vazarem por
+   cima dos campos; o vidro grosso resolve isso sem sair da linguagem. */
 .dialog {
   position: relative;
   width: 100%;
   max-width: 30rem;
   padding: 1.25rem;
-  background: var(--surface-solid);
-  border: 1px solid var(--border-strong);
+  background: var(--glass-thick-bg);
+  backdrop-filter: blur(var(--glass-thick-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-thick-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border-hover);
   border-top-color: var(--glass-top);
   border-radius: var(--radius-lg);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), var(--glass-inset);
   animation: dialog-in 0.2s var(--ease);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dialog {
+    background: #16191d;
+  }
 }
 
 .header {
@@ -224,11 +233,27 @@
   cursor: not-allowed;
 }
 
+/* No mobile as duas colunas CONTINUAM: com uma só, o formulário virava
+   uma coluna de 9 campos mais longa que a tela e exigia rolar pra
+   alcançar "Salvar". Os campos curtos (esporte, data, odd, unidades,
+   torneio, resultado) cabem bem em meia largura; só os nomes dos
+   jogadores e o mercado ganham a linha inteira. */
 @media (max-width: 520px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
   .dialog {
     padding: 1.05rem;
+  }
+  .grid {
+    gap: 0.6rem 0.5rem;
+  }
+  /* Jogadores passam a ocupar a linha toda: "Alexandre Muller" ou
+     "Illawarra Hawks" não caberiam legíveis em metade de 390px. */
+  .campoJogador {
+    grid-column: 1 / -1;
+  }
+  /* 16px exatos: abaixo disso o Safari no iOS dá zoom automático ao focar
+     o campo e desalinha a tela inteira. */
+  .input {
+    height: 2.4rem;
+    font-size: 16px;
   }
 }

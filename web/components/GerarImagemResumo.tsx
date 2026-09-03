@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { canvasParaBlob, desenharResumoDoDia } from "@/lib/imagemResumo";
 import type { Bet } from "@/lib/types";
 import { CopyIcon, DownloadIcon, ImageIcon, ShareIcon, XIcon } from "./icons";
@@ -149,7 +150,12 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
         <ImageIcon size={15} />
       </button>
 
-      {aberto ? (
+      {/* Portal pro <body> — mesma razão do NovaApostaDialog: no mobile
+          este componente vive dentro do dock flutuante, cujo z-index e
+          reset de fundo prendiam o modal na barra (era por isso que
+          clicar fora não fechava: o "fora" estava dentro do dock). */}
+      {aberto
+        ? createPortal(
         <div className={styles.overlay} onClick={fechar}>
           <div className={styles.painel} onClick={(e) => e.stopPropagation()}>
             <div className={styles.painelHeader}>
@@ -192,8 +198,10 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
               </div>
             ) : null}
           </div>
-        </div>
-      ) : null}
+        </div>,
+            document.body
+          )
+        : null}
     </>
   );
 }

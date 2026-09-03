@@ -4,10 +4,10 @@
   justify-content: center;
   width: 2.35rem;
   height: 2.35rem;
-  background: var(--surface);
-  backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur));
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -15,8 +15,8 @@
 }
 
 .trigger:hover {
-  background: var(--surface-hover);
-  border-color: var(--border-strong);
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
   color: var(--text);
 }
 
@@ -37,9 +37,9 @@
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: rgba(4, 5, 6, 0.72);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(4, 5, 6, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   animation: overlay-in 0.16s var(--ease);
 }
 
@@ -54,17 +54,23 @@
   }
 }
 
-/* Coluna estreita e alta: o próprio modal já respeita o formato vertical
-   da imagem, em vez de sobrar espaço horizontal morto dos dois lados. */
+/* Mesma linguagem dos outros painéis: vidro grosso, borda translúcida
+   com topo iluminado e sombra funda. Antes tinha fundo/borda/sombra
+   próprios (rgba fixo + --shadow-lg) e destoava do resto da interface.
+   540px porque a imagem é vertical (1080 de largura): em 420 ela ficava
+   estreita demais pra conferir o conteúdo antes de compartilhar. */
 .painel {
   display: flex;
   flex-direction: column;
-  width: min(420px, 100%);
+  width: min(540px, 100%);
   max-height: 90vh;
-  background: rgba(17, 20, 24, 0.96);
-  border: 1px solid var(--border-strong);
+  background: var(--glass-thick-bg);
+  backdrop-filter: blur(var(--glass-thick-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-thick-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border-hover);
+  border-top-color: var(--glass-top);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), var(--glass-inset);
   overflow: hidden;
   animation: painel-in 0.18s var(--ease);
 }
@@ -73,14 +79,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.9rem 1rem;
+  padding: 0.95rem 1.1rem;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .painelTitulo {
-  font-size: 0.95rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
   color: var(--text);
 }
 

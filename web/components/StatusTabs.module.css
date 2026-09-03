@@ -39,7 +39,10 @@
   box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   pointer-events: none;
   z-index: 0;
-  transition: transform 0.32s var(--ease), width 0.32s var(--ease);
+  /* 0.32s -> 0.52s com um easing próprio de "deslize": arranca rápido e
+     desacelera longamente no fim (mais suave que o --ease padrão, que
+     resolve cedo demais pra um movimento que percorre a barra inteira). */
+  transition: transform 0.52s cubic-bezier(0.32, 0.72, 0, 1), width 0.52s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {

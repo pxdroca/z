@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ESPORTE_VALUES, type Esporte, type ResultadoAposta } from "@/lib/types";
 import { PlusIcon, XIcon } from "./icons";
 import styles from "./NovaApostaDialog.module.css";
@@ -108,7 +109,13 @@ export function NovaApostaDialog({ onCriada }: { onCriada: () => void }) {
         <PlusIcon size={15} />
       </button>
 
-      {aberto ? (
+      {/* Portal pro <body>: no mobile este componente vive DENTRO do dock
+          flutuante, que tem overflow/z-index próprios e um reset que zera
+          fundo e borda de tudo que está dentro dele. Renderizado ali, o
+          modal saía preso na barra e inutilizável. O portal o tira desse
+          contexto sem mudar nada da lógica. */}
+      {aberto
+        ? createPortal(
         <div className={styles.overlay} onMouseDown={() => setAberto(false)}>
           <div
             className={styles.dialog}
@@ -156,7 +163,7 @@ export function NovaApostaDialog({ onCriada }: { onCriada: () => void }) {
 
               {/* Os dois jogadores dividem a linha: são campos irmãos e
                   ficavam ocupando duas linhas inteiras sem precisar. */}
-              <label className={styles.campo}>
+              <label className={`${styles.campo} ${styles.campoJogador}`}>
                 <span className={styles.label}>
                   {esporte === "basquete" ? "Time 1" : "Jogador 1"} *
                 </span>
@@ -168,7 +175,7 @@ export function NovaApostaDialog({ onCriada }: { onCriada: () => void }) {
                 />
               </label>
 
-              <label className={styles.campo}>
+              <label className={`${styles.campo} ${styles.campoJogador}`}>
                 <span className={styles.label}>
                   {esporte === "basquete" ? "Time 2" : "Jogador 2"} *
                 </span>
@@ -251,8 +258,10 @@ export function NovaApostaDialog({ onCriada }: { onCriada: () => void }) {
               </button>
             </div>
           </div>
-        </div>
-      ) : null}
+        </div>,
+            document.body
+          )
+        : null}
     </>
   );
 }
