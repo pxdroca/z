@@ -155,11 +155,14 @@
    apostas a imagem é curta, e o crescimento deixava um vazio embaixo dela
    com os botões colados no topo da própria seção. Agora o painel inteiro
    acompanha o tamanho da imagem. */
+/* Sem padding embaixo: a folga entre a imagem e os botões é o padding
+   de cima da .acoes, e somar os dois deixaria o espaço acima dos botões
+   com o dobro do de baixo. */
 .preview {
   flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 1rem;
+  padding: 1rem 1rem 0;
   background: var(--bg);
 }
 
@@ -180,9 +183,12 @@
   border: 1px solid var(--border);
 }
 
+/* Com `padding: 0 1rem 1rem` os botões encostavam na base da imagem: a
+   folga existia só embaixo. Agora a .preview não põe padding embaixo
+   (ver .preview) e a folga de cima vem toda daqui, igual à de baixo. */
 .acoes {
   flex-shrink: 0;
-  padding: 0 1rem 1rem;
+  padding: 1rem;
 }
 
 .acoesBotoes {
