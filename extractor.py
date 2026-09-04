@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from functools import lru_cache
 from typing import Optional
 
@@ -194,6 +195,59 @@ def _get_gemini_client():
     return genai.Client(api_key=settings.GEMINI_API_KEY)
 
 
+# Quantas vezes insistir no Gemini antes de desistir, e quanto esperar
+# entre as tentativas.
+#
+# Bug real (02/09/2026, 12 ocorrências no log): o Gemini devolveu
+# "503 UNAVAILABLE — This model is currently experiencing high demand.
+# Spikes in demand are usually temporary. Please try again later." e a
+# extração caía na hora pro parser de regex, que lê muito menos (fica sem
+# jogadores, e a tip nasce erro_extracao). O próprio erro diz que é
+# temporário e pede pra tentar de novo — era só o que faltava fazer.
+#
+# 3 tentativas com 2s/6s de espera: cabe folgado no ciclo de 5 min do
+# workflow e cobre o pico curto, que é o padrão observado.
+_GEMINI_TENTATIVAS = 3
+_GEMINI_ESPERAS = (2.0, 6.0)
+
+# Erros que vale retentar: sobrecarga do modelo (503), limite de taxa
+# (429) e falha interna (500). Um 400/401/403 é problema nosso
+# (chave inválida, prompt malformado) e retentar só perderia tempo.
+_GEMINI_STATUS_RETENTAVEIS = (429, 500, 503)
+
+
+def _gerar_com_retry(client, types, contents):
+    """Chama o Gemini insistindo enquanto o erro for temporário.
+
+    Ver _GEMINI_TENTATIVAS para o motivo (503 de pico de demanda).
+    Erros não-retentáveis sobem na primeira vez — quem chama já trata
+    caindo pro parser de texto.
+    """
+    from google.genai import errors as genai_errors
+
+    ultimo: Exception | None = None
+    for tentativa in range(1, _GEMINI_TENTATIVAS + 1):
+        try:
+            return client.models.generate_content(
+                model=settings.GEMINI_MODEL,
+                contents=contents,
+                config=types.GenerateContentConfig(response_mime_type="application/json"),
+            )
+        except genai_errors.APIError as exc:
+            if exc.code not in _GEMINI_STATUS_RETENTAVEIS or tentativa == _GEMINI_TENTATIVAS:
+                raise
+            espera = _GEMINI_ESPERAS[min(tentativa - 1, len(_GEMINI_ESPERAS) - 1)]
+            logger.warning(
+                "Gemini devolveu %s (tentativa %d/%d) — nova tentativa em %.0fs.",
+                exc.code, tentativa, _GEMINI_TENTATIVAS, espera,
+            )
+            ultimo = exc
+            time.sleep(espera)
+
+    # Inalcançável (o loop retorna ou levanta), mas deixa explícito.
+    raise ultimo if ultimo else RuntimeError("Gemini: falha sem exceção registrada")
+
+
 # Padrões que denunciam que a seleção veio como confronto/sub-odd em vez
 # de só o nome do favorito: " vs ", " x ", "(1.37)".
 _SELECAO_SUJA = re.compile(r"\s+(?:vs?|x)\s+|\(", re.IGNORECASE)
@@ -238,11 +292,7 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
         mime = "image/png" if image_path.lower().endswith("png") else "image/jpeg"
         contents.append(types.Part.from_bytes(data=image_bytes, mime_type=mime))
 
-    response = client.models.generate_content(
-        model=settings.GEMINI_MODEL,
-        contents=contents,
-        config=types.GenerateContentConfig(response_mime_type="application/json"),
-    )
+    response = _gerar_com_retry(client, types, contents)
 
     try:
         data = json.loads(response.text)
@@ -402,6 +452,50 @@ _BASQUETE_CONFRONTO_PATTERN = re.compile(
 )
 
 
+# Seleção nacional com marcador de gênero: "Hungria (F)", "França (F)",
+# "Coreia do Sul (F)", "Brasil (M)". Não tem sufixo de franquia, então o
+# padrão acima nunca casa — e como são jogos de seleção (FIBA, olimpíada),
+# o "(F)"/"(M)" é justamente o que os torna reconhecíveis sem abrir a
+# porta pra texto de UI.
+#
+# Bug real (04/09/2026): a tip "Handicap - 20.5 França odd: 1.87" veio com
+# um print onde o OCR leu "Hungria (F)" e "França (F)" em linhas
+# separadas (placar "5 : 4" no meio) — a aposta #121 nasceu com
+# jogador1/jogador2 = "?" mesmo com os dois nomes legíveis no texto.
+_SELECAO_PATTERN = re.compile(
+    r"^([A-ZÀ-Ú][\wÀ-ú.'\-]*(?:[ \t]+(?:de[ \t]+|do[ \t]+|da[ \t]+)?[A-ZÀ-Ú][\wÀ-ú.'\-]*){0,2})"
+    r"[ \t]*\((F|M)\)$",
+)
+
+
+def _find_national_teams(texto: str) -> tuple[Optional[str], Optional[str]]:
+    """Acha duas seleções nacionais, uma por linha.
+
+    O OCR desses prints põe o placar entre os dois nomes ("Hungria (F)" /
+    "5 : 4" / "França (F)"), então não dá pra exigir os dois na mesma
+    linha como _find_basketball_teams faz. Pega as duas PRIMEIRAS linhas
+    que são só "<País> (F|M)": a repetição em maiúsculas mais abaixo (a
+    tabela de odds) traz os mesmos times, e parar nas duas primeiras
+    mantém a ordem casa/visitante que o card mostra no topo.
+    """
+    achados: list[str] = []
+    for linha in texto.splitlines():
+        linha = " ".join(linha.split())
+        m = _SELECAO_PATTERN.match(linha)
+        if not m:
+            continue
+        nome = m.group(0).strip()
+        # Case-insensitive na comparação: o mesmo confronto aparece de novo
+        # em CAIXA ALTA na tabela de odds ("HUNGRIA (F)"), e sem isso o
+        # segundo time viria a ser a repetição do primeiro.
+        if any(nome.casefold() == a.casefold() for a in achados):
+            continue
+        achados.append(nome)
+        if len(achados) == 2:
+            return achados[0], achados[1]
+    return None, None
+
+
 def _find_basketball_teams(texto: str) -> tuple[Optional[str], Optional[str]]:
     """Acha os dois times de basquete no texto do OCR.
 
@@ -418,7 +512,9 @@ def _find_basketball_teams(texto: str) -> tuple[Optional[str], Optional[str]]:
         m = _BASQUETE_CONFRONTO_PATTERN.search(linha)
         if m:
             return m.group(1).strip(), m.group(2).strip()
-    return None, None
+
+    # Franquia não achada: pode ser jogo de seleção ("Hungria (F)").
+    return _find_national_teams(texto)
 
 _LABELLED_PATTERNS = {
     "torneio": re.compile(r"(?:torneio|tournament|campeonato)\s*[:\-]\s*(.+)", re.IGNORECASE),

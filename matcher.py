@@ -193,8 +193,29 @@ def _escolher_confronto(
     Devolve None quando nem isso resolve — chutar gravaria a aposta no
     confronto errado, que é pior que "não encontrada".
     """
+    # A Superbet escreve duplas como "A.Sobrenome/B.Sobrenome", então a
+    # barra é o sinal.
+    def _e_duplas(c) -> bool:
+        return "/" in c.jogador1 or "/" in c.jogador2
+
+    # Candidato único ainda precisa ser do TIPO certo. Bug real
+    # (04/09/2026, aposta #118): a tip "Diana vencer um set odd: 2.20" é de
+    # simples, a busca por 'shnaider' devolveu só o jogo de duplas
+    # (Mertens/Shnaider no US Open) e o atalho de candidato único aceitava
+    # sem olhar — gravaria a aposta no confronto errado, que é pior que
+    # "não encontrada".
     if len(plausiveis) == 1:
-        return plausiveis[0]
+        unico = plausiveis[0]
+        if _e_duplas(unico) != prefere_duplas:
+            logger.info(
+                "Superbet: único confronto para %r é de %s, mas a tip é de %s (%s x %s) — ignorando.",
+                variante,
+                "duplas" if _e_duplas(unico) else "simples",
+                "duplas" if prefere_duplas else "simples",
+                unico.jogador1, unico.jogador2,
+            )
+            return None
+        return unico
 
     if odd_tip is not None:
         com_odds = [c for c in plausiveis if c.odds]
@@ -215,12 +236,8 @@ def _escolher_confronto(
                 )
                 return melhor
 
-    # A Superbet escreve duplas como "A.Sobrenome/B.Sobrenome", então a
-    # barra é o sinal. Normalmente queremos o de SIMPLES; quando a tip diz
-    # "na duplas", a preferência inverte (ver tip_e_de_duplas).
-    def _e_duplas(c) -> bool:
-        return "/" in c.jogador1 or "/" in c.jogador2
-
+    # Normalmente queremos o de SIMPLES; quando a tip diz "na duplas", a
+    # preferência inverte (ver tip_e_de_duplas e _e_duplas acima).
     desejados = [c for c in plausiveis if _e_duplas(c) == prefere_duplas]
     rotulo = "duplas" if prefere_duplas else "simples"
 
