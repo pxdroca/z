@@ -48,14 +48,16 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from playwright.sync_api import Page, sync_playwright
 
+from zoneinfo import ZoneInfo
+
 from models import Esporte
 from nameutils import pair_matches
-from sofascore_client import EventStatus
+from sofascore_client import CanonicalMatch, EventStatus
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +111,63 @@ _STATUS_GROUP_EM_ANDAMENTO = 3
 _STATUS_GROUP_ENCERRADO = 4
 
 
+# Fuso pedido no request (`timezoneName=America/Sao_Paulo`) — é nele que o
+# 365scores devolve horário e agrupa os jogos por dia, então é nele que a
+# data da consulta e os horários devolvidos têm que ser interpretados.
+_FUSO_DO_SITE = ZoneInfo("America/Sao_Paulo")
+
+# Formatos de horário já vistos nessa API, tentados depois do ISO-8601.
+_FORMATOS_DATA = ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M")
+
+
+def _no_fuso_do_site(dia: datetime) -> datetime:
+    """Mesma instante, expresso no fuso que pedimos ao 365scores."""
+    if dia.tzinfo is None:
+        return dia
+    return dia.astimezone(_FUSO_DO_SITE)
+
+
+def _horario_do_game(game: dict) -> Optional[datetime]:
+    """Horário de início do jogo, sempre devolvido em UTC (aware) — mesmo
+    contrato do sofascore_client._extract_event, pra que o resto do
+    pipeline não precise saber de qual fonte o confronto veio.
+
+    Defensivo de propósito: se o campo mudar de nome ou de formato, isso
+    devolve None (o confronto ainda é aproveitado, só sem horário) em vez
+    de derrubar a busca inteira."""
+    bruto = game.get("startTime") or game.get("gameStartTime") or game.get("startTimeStr")
+    if not isinstance(bruto, str) or not bruto.strip():
+        return None
+    texto = bruto.strip().replace("Z", "+00:00")
+
+    dt: Optional[datetime] = None
+    try:
+        dt = datetime.fromisoformat(texto)
+    except ValueError:
+        for formato in _FORMATOS_DATA:
+            try:
+                dt = datetime.strptime(texto, formato)
+                break
+            except ValueError:
+                continue
+    if dt is None:
+        logger.warning("365scores: não consegui interpretar o horário %r do jogo.", bruto)
+        return None
+
+    # Sem fuso explícito = está no fuso que pedimos no request.
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_FUSO_DO_SITE)
+    return dt.astimezone(timezone.utc)
+
+
+def _torneio_do_game(game: dict) -> Optional[str]:
+    for chave in ("competitionDisplayName", "competitionName", "compName"):
+        valor = game.get(chave)
+        if isinstance(valor, str) and valor.strip():
+            return valor.strip()
+    return None
+
+
 def _run_with_browser(fn):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -124,7 +183,12 @@ def _run_with_browser(fn):
 
 
 def _fetch_games(page: Page, dia: datetime, esporte: str = Esporte.TENIS.value) -> list[dict]:
-    data_str = dia.strftime("%d/%m/%Y")
+    # O request pede timezoneName=America/Sao_Paulo, então a data tem que
+    # ser a data NESSE fuso. Bug real que isto evita: o runner do GitHub
+    # Actions roda em UTC, e entre 21:00 e 00:00 de Brasília "hoje" em UTC
+    # já é o dia seguinte — a consulta ia pro dia errado justamente na
+    # janela de virada, que é quando o tipster posta as tips (madrugada).
+    data_str = _no_fuso_do_site(dia).strftime("%d/%m/%Y")
     sport_id = _SPORT_IDS[esporte]
     url = (
         f"{_BASE_URL}?appTypeId=5&langId=31&timezoneName=America/Sao_Paulo"
@@ -207,6 +271,68 @@ def _game_to_status(game: dict) -> EventStatus:
     )
 
 
+def find_canonical_match_365(
+    jogador1: str,
+    jogador2: str,
+    threshold: int,
+    esporte: str = Esporte.TENIS.value,
+    dias_de_busca: int = 2,
+    dias_atras: int = 1,
+    referencia: Optional[datetime] = None,
+) -> Optional[CanonicalMatch]:
+    """
+    Confirma o CONFRONTO (nomes oficiais, torneio, horário) pelo 365scores —
+    a mesma coisa que sofascore_client.find_canonical_match faz, mas por uma
+    fonte independente e MUITO mais barata: 1 request por dia consultado,
+    contra ~80 do SofaScore (que precisa listar os torneios do dia e depois
+    pedir os jogos de cada um, ver a docstring de sofascore_client).
+
+    Por isso esta é hoje a fonte PRIMÁRIA do matcher.py: além de barata, é
+    a que continua respondendo quando o SofaScore devolve 403 pro IP do
+    runner do GitHub Actions — que é o modo de falha real e recorrente
+    deste projeto em produção.
+
+    Devolve CanonicalMatch com `sofascore_event_id=None` (o id daqui é de
+    outro site e não serve pra consultar o SofaScore depois) — o
+    acompanhamento de placar dessas apostas é feito por nome, ver
+    find_status_by_names e score_updater._consultar_status.
+
+    A janela cobre `dias_atras` dias para trás porque a tip pode ser
+    processada depois da virada do dia (o tipster posta de madrugada, e o
+    runner pensa em UTC) — sem isso, um jogo de ontem à noite fica fora do
+    alcance da busca e a aposta nunca é confirmada.
+    """
+    referencia = referencia or datetime.now(timezone.utc)
+
+    def _buscar(page: Page) -> Optional[CanonicalMatch]:
+        for offset in range(-dias_atras, dias_de_busca + 1):
+            dia = referencia + timedelta(days=offset)
+            for game in _fetch_games(page, dia, esporte):
+                home = (game.get("homeCompetitor") or {}).get("name", "")
+                away = (game.get("awayCompetitor") or {}).get("name", "")
+                if not home or not away:
+                    continue
+                if pair_matches(jogador1, jogador2, home, away, threshold):
+                    candidato = CanonicalMatch(
+                        jogador1_oficial=home,
+                        jogador2_oficial=away,
+                        torneio_oficial=_torneio_do_game(game),
+                        data_hora=_horario_do_game(game),
+                        sofascore_event_id=None,
+                    )
+                    logger.info(
+                        "365scores confirmou: %s x %s | %s | %s",
+                        home, away, candidato.torneio_oficial, candidato.data_hora,
+                    )
+                    return candidato
+        return None
+
+    resultado = _run_with_browser(_buscar)
+    if resultado is None:
+        logger.warning("365scores: confronto não encontrado para %s x %s", jogador1, jogador2)
+    return resultado
+
+
 def find_status_by_names(
     jogador1: str,
     jogador2: str,
@@ -214,6 +340,7 @@ def find_status_by_names(
     esporte: str = Esporte.TENIS.value,
     dias_de_busca: int = 1,
     referencia: Optional[datetime] = None,
+    dias_atras: int = 1,
 ) -> Optional[EventStatus]:
     """
     Busca o jogo por nome dos dois jogadores (hoje + `dias_de_busca` dias
@@ -225,10 +352,13 @@ def find_status_by_names(
     Devolve None se não achar (jogo não listado nesse site, nomes não
     batem, ou o site também falhou) — o chamador decide o que fazer.
     """
-    referencia = referencia or datetime.now()
+    referencia = referencia or datetime.now(timezone.utc)
 
     def _buscar(page: Page) -> Optional[EventStatus]:
-        for offset in range(dias_de_busca + 1):
+        # Também olha `dias_atras` dias para trás: um jogo que começou
+        # ontem à noite no horário de Brasília já é "anteontem" para um
+        # runner que pensa em UTC — sem isso o placar dele nunca era achado.
+        for offset in range(-dias_atras, dias_de_busca + 1):
             dia = referencia + timedelta(days=offset)
             for game in _fetch_games(page, dia, esporte):
                 home = (game.get("homeCompetitor") or {}).get("name", "")

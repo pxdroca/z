@@ -145,6 +145,13 @@ class Bet:
     status: str = BetStatus.NAO_ENCONTRADA.value
     fonte_texto: str = ""
     mensagem_id: Optional[int] = None
+    # Chat do Telegram de onde a mensagem veio. Obrigatório para a
+    # idempotência funcionar: o grupo de tips é recriado todo dia, e cada
+    # grupo novo é um chat diferente com numeração de mensagens PRÓPRIA
+    # (reinicia perto de 1). Sem o chat_id, o id 98 do grupo de hoje é
+    # confundido com o id 98 do grupo de ontem — ver
+    # database.bet_exists_for_message.
+    chat_id: Optional[int] = None
     criado_em: Optional[datetime] = None
     sofascore_event_id: Optional[int] = None  # usado por score_updater.py para acompanhar o placar
     placar_final: Optional[str] = None        # ex: "6-4, 6-3", preenchido quando a partida termina

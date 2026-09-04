@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS bets (
     links_json           TEXT DEFAULT '{}',     -- JSON: {slug: {"nome":..,"url":..,"exato":bool}} por casa de apostas
     status               TEXT NOT NULL DEFAULT 'nao_encontrada',
     fonte_texto          TEXT DEFAULT '',
-    mensagem_id          BIGINT UNIQUE,          -- id da msg do Telegram, evita processar 2x
+    mensagem_id          BIGINT,                 -- id da msg do Telegram (único POR CHAT, ver idx_bets_chat_mensagem)
+    chat_id              BIGINT,                 -- chat do Telegram de origem — o grupo é recriado todo dia
     criado_em            TIMESTAMPTZ NOT NULL DEFAULT now(),
     sofascore_event_id   BIGINT,                 -- usado por score_updater.py para acompanhar o placar
     placar_final         TEXT,                   -- ex: "6-4, 6-3", preenchido quando a partida termina
@@ -81,7 +82,55 @@ _EXTRA_COLUMNS = {
     # lógica de matching/conferência de resultado se aplica. Default 'tenis'
     # cobre as linhas existentes, todas anteriores ao suporte a basquete.
     "esporte": "TEXT DEFAULT 'tenis'",
+    # chat_id: ver models.Bet.chat_id e _migrar_unicidade_da_mensagem.
+    "chat_id": "BIGINT",
 }
+
+
+def _migrar_unicidade_da_mensagem(conn: psycopg.Connection) -> None:
+    """Troca a unicidade GLOBAL de `mensagem_id` pela unicidade por CHAT.
+
+    Bug real que isto corrige: o grupo de tips é recriado todo dia, e cada
+    grupo novo é um chat do Telegram diferente, com numeração de mensagens
+    própria (reinicia perto de 1) — o mesmo motivo que já obrigou a
+    guardar o `last_message_id` do listener por chat (ver
+    listener.poll_new_messages). Com `mensagem_id BIGINT UNIQUE` global, a
+    mensagem 98 do grupo de HOJE era considerada "já processada" só porque
+    a mensagem 98 do grupo de ONTEM já estava no banco — e como o pipeline
+    grava uma linha para praticamente toda mensagem do grupo (as tips viram
+    apostas, o resto vira linha `erro_extracao` de auditoria), no dia
+    seguinte quase toda tip nova era engolida em silêncio (log de debug).
+
+    Idempotente: pode rodar em todo init_db().
+    """
+    # 1. Remove a constraint UNIQUE antiga (só a que é exatamente
+    #    (mensagem_id) — não mexe em nenhuma outra). O nome é gerado pelo
+    #    Postgres, então é descoberto pelo catálogo em vez de chutado.
+    cur = conn.execute(
+        """
+        SELECT tc.constraint_name
+          FROM information_schema.table_constraints tc
+          JOIN information_schema.key_column_usage kcu
+            ON tc.constraint_name = kcu.constraint_name
+           AND tc.table_schema = kcu.table_schema
+         WHERE tc.table_name = 'bets'
+           AND tc.constraint_type = 'UNIQUE'
+         GROUP BY tc.constraint_name
+        HAVING COUNT(*) = 1 AND MIN(kcu.column_name) = 'mensagem_id'
+        """
+    )
+    for row in cur.fetchall():
+        nome = row["constraint_name"]
+        conn.execute(f'ALTER TABLE bets DROP CONSTRAINT "{nome}"')
+        logger.info("Unicidade global de mensagem_id removida (constraint %s).", nome)
+
+    # 2. Cria a unicidade correta: (chat_id, mensagem_id). No Postgres,
+    #    NULLs são distintos entre si num índice único, então as linhas
+    #    antigas (chat_id NULL) e as apostas manuais (mensagem_id NULL) não
+    #    conflitam entre si — que é o comportamento desejado.
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bets_chat_mensagem ON bets(chat_id, mensagem_id)"
+    )
 
 
 def _ensure_columns(conn: psycopg.Connection) -> None:
@@ -113,6 +162,9 @@ def init_db() -> None:
     with get_connection() as conn:
         conn.execute(_SCHEMA)
         _ensure_columns(conn)
+        # Depois de _ensure_columns: a migração usa a coluna chat_id, que
+        # em bancos antigos só existe a partir dali.
+        _migrar_unicidade_da_mensagem(conn)
     logger.info("Banco de dados pronto (Postgres/Neon)")
 
 
@@ -139,6 +191,7 @@ def _row_to_bet(row: dict) -> Bet:
         status=row["status"],
         fonte_texto=row["fonte_texto"] or "",
         mensagem_id=row["mensagem_id"],
+        chat_id=row.get("chat_id"),
         criado_em=criado_em,
         sofascore_event_id=row["sofascore_event_id"],
         placar_final=row["placar_final"],
@@ -151,10 +204,20 @@ def _row_to_bet(row: dict) -> Bet:
     )
 
 
-def bet_exists_for_message(mensagem_id: int) -> bool:
-    """Evita reprocessar a mesma mensagem do Telegram (ex: se o listener reiniciar)."""
+def bet_exists_for_message(mensagem_id: int, chat_id: Optional[int] = None) -> bool:
+    """Evita reprocessar a mesma mensagem do Telegram (ex: se o listener
+    reiniciar, ou num backfill que se sobreponha ao poll).
+
+    A comparação é SEMPRE por (chat_id, mensagem_id): o id da mensagem só é
+    único dentro de um chat, e o grupo de tips é recriado todo dia — ver
+    _migrar_unicidade_da_mensagem para o bug que isso corrige.
+    `IS NOT DISTINCT FROM` trata NULL = NULL (linhas antigas, anteriores à
+    coluna chat_id, e execuções locais sem chat conhecido)."""
     with get_connection() as conn:
-        cur = conn.execute("SELECT 1 FROM bets WHERE mensagem_id = %s", (mensagem_id,))
+        cur = conn.execute(
+            "SELECT 1 FROM bets WHERE mensagem_id = %s AND chat_id IS NOT DISTINCT FROM %s",
+            (mensagem_id, chat_id),
+        )
         return cur.fetchone() is not None
 
 
@@ -164,10 +227,10 @@ def insert_bet(bet: Bet) -> int:
         cur = conn.execute(
             """
             INSERT INTO bets (jogador1, jogador2, torneio, mercado, odd,
-                               data_hora, links_json, status, fonte_texto, mensagem_id,
+                               data_hora, links_json, status, fonte_texto, mensagem_id, chat_id,
                                sofascore_event_id, unidades, resultado, tipo_aposta, selecoes_json,
                                esporte)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -181,6 +244,7 @@ def insert_bet(bet: Bet) -> int:
                 bet.status,
                 bet.fonte_texto,
                 bet.mensagem_id,
+                bet.chat_id,
                 bet.sofascore_event_id,
                 bet.unidades,
                 bet.resultado,
@@ -354,37 +418,52 @@ def list_apostas_ativas() -> list[Bet]:
 
 def list_trackable_bets() -> list[Bet]:
     """
-    Apostas que score_updater.py deve consultar no SofaScore: ainda não
-    encerradas e com um sofascore_event_id conhecido (sem isso não há o que
-    consultar).
+    Apostas que score_updater.py deve acompanhar: ainda não encerradas
+    (agendada/ao_vivo).
+
+    Não exige mais `sofascore_event_id IS NOT NULL`: desde que o matcher
+    passou a confirmar confrontos também pelo 365scores e pela Superbet
+    (ver matcher.find_match), existem apostas legitimamente confirmadas
+    SEM event_id do SofaScore. Exigir o event_id aqui deixaria justamente
+    essas apostas sem nenhum acompanhamento de placar — elas são
+    consultadas por NOME no 365scores (ver score_updater._consultar_status).
     """
     with get_connection() as conn:
         cur = conn.execute(
-            """
-            SELECT * FROM bets
-             WHERE status IN (%s, %s)
-               AND sofascore_event_id IS NOT NULL
-            """,
+            "SELECT * FROM bets WHERE status IN (%s, %s)",
             (BetStatus.AGENDADA.value, BetStatus.AO_VIVO.value),
         )
         rows = cur.fetchall()
     return [_row_to_bet(r) for r in rows]
 
 
-def list_unmatched_bets() -> list[Bet]:
+def list_unmatched_bets(desde: Optional[datetime] = None) -> list[Bet]:
     """
     Apostas que não acharam o confronto oficial na primeira tentativa (ex:
-    o SofaScore ainda não tinha listado a partida quando a tip chegou).
+    a fonte de dados ainda não tinha listado a partida quando a tip chegou).
     Usado por score_updater.py para tentar de novo o matcher.py::find_match()
     periodicamente — necessário desde que listener.py passou a rodar em
     lote (polling) em vez de processar cada mensagem na hora: uma tentativa
     falha não tem mais uma "próxima mensagem" natural que a reprocesse.
+
+    `desde` limita a apostas criadas a partir desse instante, e é o que
+    impede a fila de retry de crescer para sempre. Sem esse corte, toda
+    aposta não encontrada de TODOS os dias anteriores era retentada a cada
+    ciclo — e como o matcher só procura o jogo de hoje em diante, uma
+    aposta cujo jogo já passou NUNCA pode ser encontrada: ela ficava na
+    fila eternamente, somando com as do dia seguinte, deixando cada ciclo
+    mais lento até estourar o timeout do workflow (10 min) e matar o ciclo
+    no meio — inclusive antes de chegar nas apostas do dia.
     """
+    query = "SELECT * FROM bets WHERE status = %s"
+    params: list = [BetStatus.NAO_ENCONTRADA.value]
+    if desde is not None:
+        query += " AND criado_em >= %s"
+        params.append(desde)
+    query += " ORDER BY criado_em DESC"
+
     with get_connection() as conn:
-        cur = conn.execute(
-            "SELECT * FROM bets WHERE status = %s",
-            (BetStatus.NAO_ENCONTRADA.value,),
-        )
+        cur = conn.execute(query, params)
         rows = cur.fetchall()
     return [_row_to_bet(r) for r in rows]
 

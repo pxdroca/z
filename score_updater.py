@@ -11,19 +11,23 @@ Uso:
     python score_updater.py --interval 120   # ciclo a cada 120s em vez do padrão
 
 A cada ciclo:
-  1. Busca no banco toda aposta com status "agendada" ou "ao_vivo" e um
-     sofascore_event_id conhecido (list_trackable_bets, em database.py).
+  1. Busca no banco toda aposta com status "agendada" ou "ao_vivo"
+     (list_trackable_bets, em database.py). As que têm sofascore_event_id
+     são consultadas por id; as confirmadas pelo 365scores/Superbet (sem
+     event_id do SofaScore) são consultadas por nome — ver _consultar_status.
   2. Para cada uma, consulta get_event_status() (sofascore_client.py):
        - "inprogress" e a aposta ainda estava "agendada" -> promove pra "ao_vivo".
        - "finished" -> grava placar_final + vencedor_partida, muda o status
          para "encerrada" e manda uma notificação avisando o resultado.
        - "notstarted" -> não faz nada (ainda não começou).
-  3. Reconsulta o matcher.py para toda aposta com status "nao_encontrada"
-     (list_unmatched_bets, em database.py) — necessário desde que o
-     listener.py passou a rodar em lote (poll periódico, em vez de processar
-     cada mensagem instantaneamente): uma tip cujo jogo o SofaScore ainda não
-     tinha listado no momento do poll não tem mais uma "próxima mensagem"
-     natural que a reprocesse, então esse retry cobre esse caso.
+  3. Reconsulta o matcher.py para toda aposta "nao_encontrada" das últimas
+     JANELA_DE_RETRY horas (list_unmatched_bets, em database.py) —
+     necessário desde que o listener.py passou a rodar em lote (poll
+     periódico, em vez de processar cada mensagem instantaneamente): uma
+     tip cujo jogo a fonte de dados ainda não tinha listado no momento do
+     poll não tem mais uma "próxima mensagem" natural que a reprocesse,
+     então esse retry cobre esse caso. A janela é o que impede essa fila
+     de crescer para sempre — ver JANELA_DE_RETRY.
   4. Espera um atraso aleatório entre cada partida consultada (mesmo espírito
      "educado" dos outros módulos que batem no SofaScore/casas de apostas).
 
@@ -40,7 +44,7 @@ import logging
 import random
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import resultado_checker
@@ -68,6 +72,18 @@ logger = logging.getLogger("score_updater")
 
 DEFAULT_INTERVAL_SECONDS = 180  # 3 minutos
 
+# Por quanto tempo uma aposta "não encontrada" continua sendo retentada.
+#
+# Sem esse teto, TODA aposta não encontrada de TODOS os dias era retentada
+# a cada ciclo, para sempre — e como a busca do confronto olha do dia da
+# tip em diante, um jogo que já aconteceu nunca poderia ser achado. A fila
+# só crescia: cada dia empilhava as novas sobre as velhas, o ciclo ficava
+# mais lento, e passava a estourar o timeout do workflow (10 min) antes de
+# chegar nas apostas do dia — ou seja, as antigas (insalváveis) impediam o
+# retry das novas (salváveis). 36h cobre com folga a tip da madrugada cujo
+# jogo é no dia seguinte.
+JANELA_DE_RETRY = timedelta(hours=36)
+
 
 def _polite_delay() -> None:
     """Mesmo espírito dos outros módulos: não bater no SofaScore feito metralhadora."""
@@ -94,13 +110,29 @@ def _consultar_status(bet: Bet) -> Optional[EventStatus]:
     request pontual, e o retry de sofascore_client não ajuda nesse caso
     porque o IP continua o mesmo).
     """
-    evt = get_event_status(bet.sofascore_event_id)
-    if evt is not None:
-        return evt
+    if bet.sofascore_event_id is not None:
+        evt = get_event_status(bet.sofascore_event_id)
+        if evt is not None:
+            return evt
+        logger.warning(
+            "Aposta #%s: SofaScore falhou (evento %s), tentando 365scores.",
+            bet.id, bet.sofascore_event_id,
+        )
+    else:
+        # Confronto confirmado pelo 365scores ou pela Superbet — não existe
+        # event_id do SofaScore pra consultar, então vai direto pra busca
+        # por nome (ver matcher.find_match).
+        logger.debug("Aposta #%s: sem event_id do SofaScore, consultando o 365scores por nome.", bet.id)
 
-    logger.warning("Aposta #%s: SofaScore falhou (evento %s), tentando 365scores.", bet.id, bet.sofascore_event_id)
     try:
-        evt = find_status_by_names(bet.jogador1, bet.jogador2, threshold=settings.SUPERBET_FUZZY_THRESHOLD)
+        evt = find_status_by_names(
+            bet.jogador1, bet.jogador2,
+            threshold=settings.SUPERBET_FUZZY_THRESHOLD,
+            esporte=bet.esporte,
+            # Ancorar no horário do jogo (quando conhecido) evita procurar
+            # no dia errado quando o ciclo roda depois da virada do dia.
+            referencia=bet.data_hora or bet.criado_em,
+        )
     except Exception:
         logger.exception("Aposta #%s: 365scores também falhou.", bet.id)
         return None
@@ -210,7 +242,14 @@ def _retentar_bet_nao_encontrada(bet: Bet) -> None:
     `if jogador2:` em matcher.find_match não detectava o placeholder e
     nunca reencaminhava pra find_canonical_match_by_name)."""
     jogador2 = bet.jogador2 if bet.jogador2 != "?" else None
-    match = find_match(bet.jogador1, jogador2, bet.esporte, odd_tip=bet.odd)
+    # referencia = quando a tip chegou, não "agora": a busca do confronto é
+    # uma janela de dias ao redor da referência, e ancorar em "agora" fazia
+    # o retry procurar o jogo da tip de ontem no dia de hoje — nunca achava.
+    match = find_match(
+        bet.jogador1, jogador2, bet.esporte,
+        referencia=bet.criado_em,
+        odd_tip=bet.odd,
+    )
     if not match.encontrado:
         logger.debug("Aposta #%s: ainda não encontrada (%s x %s)", bet.id, bet.jogador1, bet.jogador2)
         return
@@ -246,9 +285,14 @@ def run_once() -> int:
     # mesmo confronto, e permite juntar todas numa única notificação (ver
     # _monta_notificacao_encerrada) em vez de mandar 1 mensagem quase
     # idêntica por aposta.
-    apostas_por_evento: dict[int, list[Bet]] = {}
+    # Apostas sem event_id (confronto confirmado pelo 365scores/Superbet)
+    # são consultadas por NOME, uma a uma — não dá pra agrupar todas sob a
+    # chave None, senão o status de UM jogo seria aplicado a apostas de
+    # jogos diferentes.
+    apostas_por_evento: dict[object, list[Bet]] = {}
     for bet in apostas:
-        apostas_por_evento.setdefault(bet.sofascore_event_id, []).append(bet)
+        chave = bet.sofascore_event_id if bet.sofascore_event_id is not None else f"sem_event_id:{bet.id}"
+        apostas_por_evento.setdefault(chave, []).append(bet)
 
     notificacoes: list[str] = []
     for event_id, apostas_do_evento in apostas_por_evento.items():
@@ -273,9 +317,12 @@ def run_once() -> int:
     if notificacoes:
         asyncio.run(_enviar_notificacoes(notificacoes))
 
-    nao_encontradas = list_unmatched_bets()
+    nao_encontradas = list_unmatched_bets(desde=datetime.now(timezone.utc) - JANELA_DE_RETRY)
     if nao_encontradas:
-        logger.info("Retentando %d aposta(s) não encontrada(s).", len(nao_encontradas))
+        logger.info(
+            "Retentando %d aposta(s) não encontrada(s) das últimas %s.",
+            len(nao_encontradas), JANELA_DE_RETRY,
+        )
     for bet in nao_encontradas:
         try:
             _retentar_bet_nao_encontrada(bet)

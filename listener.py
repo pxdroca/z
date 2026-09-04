@@ -55,6 +55,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path
+from typing import Optional
 
 # O console do Windows normalmente usa uma codepage legada (cp1252) que não
 # suporta vários caracteres Unicode usados em logs/bibliotecas (emojis,
@@ -188,7 +189,7 @@ async def _resolve_source_chat(client: TelegramClient):
     return mais_recente.entity
 
 
-async def _processar_aviso_cashout(mensagem_id: int, nome_citado: str, caption: str) -> None:
+async def _processar_aviso_cashout(mensagem_id: int, chat_id: Optional[int], nome_citado: str, caption: str) -> None:
     """
     Casa o nome citado num aviso de cash-out ("Fulano está pago!") com
     apostas em andamento (agendada/ao_vivo) daquele jogador — pode haver mais
@@ -227,6 +228,7 @@ async def _processar_aviso_cashout(mensagem_id: int, nome_citado: str, caption: 
         status=BetStatus.ERRO_EXTRACAO.value,
         fonte_texto=caption,
         mensagem_id=mensagem_id,
+        chat_id=chat_id,
         unidades=1.0,
         esporte=casadas[0].esporte if casadas else Esporte.TENIS.value,
     )
@@ -238,8 +240,14 @@ async def process_message(message: Message) -> None:
     Núcleo do pipeline: roda para cada mensagem nova (ou de backfill).
     Idempotente — se a msg já foi processada (mesmo message.id), é ignorada.
     """
-    if bet_exists_for_message(message.id):
-        logger.debug("Mensagem %s já processada, ignorando.", message.id)
+    # A idempotência é por (chat_id, message.id) — o id da mensagem só é
+    # único DENTRO de um chat, e o grupo de tips é recriado todo dia (ver
+    # database._migrar_unicidade_da_mensagem). Log em info, não debug: um
+    # "já processada" inesperado era invisível em produção justamente
+    # quando mais importava.
+    chat_id = getattr(message, "chat_id", None)
+    if bet_exists_for_message(message.id, chat_id):
+        logger.info("Mensagem %s do chat %s já processada, ignorando.", message.id, chat_id)
         return
 
     caption = message.raw_text or ""
@@ -265,7 +273,7 @@ async def process_message(message: Message) -> None:
     if caption and not image_path:
         nome_citado = detectar_aviso_cashout(caption)
         if nome_citado:
-            await _processar_aviso_cashout(message.id, nome_citado, caption)
+            await _processar_aviso_cashout(message.id, chat_id, nome_citado, caption)
             return
 
     # --- extractor.py -----------------------------------------------------
@@ -285,6 +293,7 @@ async def process_message(message: Message) -> None:
             status=BetStatus.ERRO_EXTRACAO.value,
             fonte_texto=extracted.texto_bruto,
             mensagem_id=message.id,
+            chat_id=chat_id,
             unidades=1.0,
             esporte=extracted.esporte,
         )
@@ -323,6 +332,7 @@ async def process_message(message: Message) -> None:
             status=BetStatus.AGENDADA.value,
             fonte_texto=extracted.texto_bruto,
             mensagem_id=message.id,
+            chat_id=chat_id,
             unidades=1.0,
             tipo_aposta=TipoAposta.MULTIPLA.value,
             selecoes=extracted.selecoes,
@@ -339,10 +349,15 @@ async def process_message(message: Message) -> None:
     # A odd extraída vai junto: quando o tipster cita só o favorito, ela
     # desempata entre o jogo de simples e o de duplas do mesmo jogador na
     # Superbet (ver matcher.buscar_confronto_na_superbet).
+    # referencia = data da MENSAGEM, não "agora": num backfill (ou num poll
+    # que atrasou/represou mensagens) "agora" pode ser horas depois da tip,
+    # e a busca do confronto é uma janela de dias ao redor da referência —
+    # ancorar na tip é o que mantém a janela sobre o jogo certo.
     match: MatchInfo = await asyncio.to_thread(
         partial(
             find_match,
             extracted.jogador1, extracted.jogador2, extracted.esporte,
+            referencia=message.date,
             odd_tip=extracted.odd,
         )
     )
@@ -365,6 +380,7 @@ async def process_message(message: Message) -> None:
         status=status,
         fonte_texto=extracted.texto_bruto,
         mensagem_id=message.id,
+        chat_id=chat_id,
         sofascore_event_id=match.sofascore_event_id,
         unidades=1.0,
         esporte=extracted.esporte,

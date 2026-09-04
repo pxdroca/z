@@ -4,9 +4,18 @@ matcher.py
 Orquestrador da etapa de "descoberta do confronto". Dado (jogador1,
 jogador2) extraídos do print pelo extractor.py, este módulo:
 
-  1. Consulta o SofaScore (sofascore_client.py) pra confirmar o jogo oficial
-     — nomes corretos, torneio, data/hora exata. Isso é gratuito, estável e
-     não depende de navegador (JSON puro).
+  1. Confirma o jogo oficial (nomes corretos, torneio, data/hora exata)
+     consultando, NESTA ORDEM, até alguma responder:
+       a) 365scores (scores365_client.py) — 1 request por dia consultado;
+       b) SofaScore (sofascore_client.py), varredura do dia — ~80 requests
+          por dia consultado, e é a fonte que bloqueia o IP dos runners do
+          GitHub Actions com 403 de forma recorrente;
+       c) SofaScore, busca por nome — outra rota, costuma passar quando a
+          varredura não passa;
+       d) Superbet (bookmakers/superbet.py) — a casa onde a aposta existe.
+          É a única que enxerga o jogo quando as fontes esportivas falham,
+          e traz nomes, dia/hora e o link direto da partida.
+     Ver find_match/_confirmar_par/_confronto_pela_superbet.
   2. Para cada casa de apostas habilitada em BOOKMAKERS (.env) — por padrão
      Superbet, Betano e bet365 — pede um link (bookmakers/<casa>.py). Cada
      adaptador tenta achar o link EXATO daquela partida com um navegador
@@ -21,31 +30,39 @@ seletores e domínios/paths específicos de cada casa.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from bookmakers import REGISTRY
 from config import settings
 from models import Esporte, MatchInfo
 from nameutils import names_match, pair_matches, search_variants
-from sofascore_client import find_canonical_match, find_canonical_match_by_name
+from scores365_client import find_canonical_match_365
+from sofascore_client import CanonicalMatch, find_canonical_match, find_canonical_match_by_name
 
 logger = logging.getLogger(__name__)
+
+# Fuso em que as casas de apostas brasileiras mostram o horário dos jogos.
+# Fixo (não settings.TIMEZONE): é o relógio DO SITE, não o do usuário.
+_FUSO_DA_CASA = ZoneInfo("America/Sao_Paulo")
 
 
 def buscar_confronto_na_superbet(
     nome: str,
     esporte: str = Esporte.TENIS.value,
     odd_tip: Optional[float] = None,
-) -> Optional[tuple[str, str, bool]]:
+):
     """Procura o confronto de `nome` na busca da Superbet, tentando o nome
     inteiro e depois só o sobrenome (ver nameutils.search_variants).
-    Devolve (jogador1, jogador2, é_hoje) do confronto escolhido, ou None.
+    Devolve o card escolhido (bookmakers.superbet._RawMatch: nomes, texto do
+    horário, link e odds), ou None.
 
-    O terceiro item diz se o card da Superbet marcava o jogo como sendo de
-    HOJE. Importa porque a Superbet lista só jogos abertos pra aposta: se o
-    jogo de hoje do jogador já terminou, ela oferece o de amanhã, e aceitar
-    isso grava a aposta no confronto errado. Bug real (03/09/2026): a tip
+    Quem chama usa `_card_eh_hoje(card.horario_texto)` para saber se o card
+    é de hoje. Importa porque a Superbet lista só jogos abertos pra aposta:
+    se o jogo de hoje do jogador já terminou, ela oferece o de amanhã, e
+    aceitar isso grava a aposta no confronto errado. Bug real (03/09/2026): a tip
     "de la torre odd 2.00" era Daniel Rincon x Montes-de la Torre (11:55,
     já encerrado), mas foi gravada como o jogo de 04/09 contra Jack
     Pinnington Jones — o painel mostrava "agendada" para uma aposta que já
@@ -108,13 +125,12 @@ def buscar_confronto_na_superbet(
         if escolhido is None:
             return None
 
-        eh_hoje = _card_eh_hoje(escolhido.horario_texto)
         logger.info(
             "Superbet confirmou (busca por %r): %s x %s | card=%r odds=%s",
             variante, escolhido.jogador1, escolhido.jogador2,
             escolhido.horario_texto, escolhido.odds or "-",
         )
-        return escolhido.jogador1, escolhido.jogador2, eh_hoje
+        return escolhido
 
     return None
 
@@ -199,6 +215,176 @@ def _escolher_confronto(plausiveis: list, variante: str, odd_tip: Optional[float
     return None
 
 
+def _data_hora_do_card(horario_texto: str, referencia: Optional[datetime]) -> Optional[datetime]:
+    """Converte o rótulo do card da Superbet ("Hoje, 14:30" / "Amanhã, 09:00")
+    no horário real do jogo, em UTC — mesmo contrato das outras fontes.
+
+    A Superbet mostra o horário de Brasília, então é nesse fuso que "hoje"
+    e "14:30" são interpretados; converter no fim evita o erro clássico de
+    gravar como UTC um horário que era local (que foi o que já colocou
+    jogos de manhã como "ao vivo de madrugada" neste projeto).
+
+    Devolve None quando o card não traz hora (jogo ao vivo mostra placar no
+    lugar do horário) — o confronto ainda vale, só fica sem data_hora."""
+    texto = (horario_texto or "").strip().lower()
+    achou_hora = re.search(r"(\d{1,2}):(\d{2})", texto)
+    if not achou_hora:
+        return None
+    hora, minuto = int(achou_hora.group(1)), int(achou_hora.group(2))
+    if not (0 <= hora <= 23 and 0 <= minuto <= 59):
+        return None
+
+    base = referencia or datetime.now(timezone.utc)
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    local = base.astimezone(_FUSO_DA_CASA)
+    if "amanh" in texto:
+        local = local + timedelta(days=1)
+
+    try:
+        inicio = local.replace(hour=hora, minute=minuto, second=0, microsecond=0)
+    except ValueError:
+        return None
+    return inicio.astimezone(timezone.utc)
+
+
+def _confirmar_par(
+    jogador1: str,
+    jogador2: str,
+    esporte: str,
+    dias_de_busca: int,
+    referencia: Optional[datetime],
+) -> Optional[CanonicalMatch]:
+    """Confirma um confronto de que já temos os DOIS nomes, tentando as
+    fontes em ordem de custo/confiabilidade:
+
+      1. 365scores — 1 request por dia consultado. É a fonte primária desde
+         que ficou claro que o SofaScore bloqueia o IP dos runners do
+         GitHub Actions com 403 de forma recorrente (ver
+         scores365_client.find_canonical_match_365).
+      2. SofaScore, varredura do dia (~80 requests por dia consultado).
+      3. SofaScore, busca por nome — rota diferente (/search/all +
+         /team/{id}/featured-event), costuma passar quando a varredura não
+         passa. Só aceita se o confronto devolvido bater com os dois nomes
+         que já tínhamos, senão um homônimo entraria no lugar.
+
+    Devolve None se nenhuma confirmar — aí find_match ainda tenta a
+    Superbet, que é a única fonte que enxerga o jogo do ponto de vista de
+    quem vai apostar nele.
+    """
+    threshold = settings.SUPERBET_FUZZY_THRESHOLD
+
+    canonico = find_canonical_match_365(
+        jogador1, jogador2, threshold, esporte=esporte, referencia=referencia,
+    )
+    if canonico is not None:
+        return canonico
+
+    canonico = find_canonical_match(
+        jogador1, jogador2, esporte=esporte, dias_de_busca=dias_de_busca, referencia=referencia,
+    )
+    if canonico is not None:
+        return canonico
+
+    for nome in (jogador1, jogador2):
+        candidato = find_canonical_match_by_name(nome, esporte=esporte, referencia=referencia)
+        if candidato and pair_matches(
+            jogador1, jogador2,
+            candidato.jogador1_oficial, candidato.jogador2_oficial,
+            threshold,
+        ):
+            logger.info(
+                "SofaScore: confronto resolvido pela busca por nome (%r) — "
+                "as outras fontes não confirmaram.", nome,
+            )
+            return candidato
+    return None
+
+
+def _confronto_pela_superbet(
+    jogador1: str,
+    jogador2: Optional[str],
+    esporte: str,
+    dias_de_busca: int,
+    referencia: Optional[datetime],
+    odd_tip: Optional[float],
+    exigir_hoje: bool,
+    ja_tentou_par: bool = False,
+) -> tuple[Optional[CanonicalMatch], Optional[str]]:
+    """Última tentativa: usa a busca da Superbet como fonte do confronto.
+
+    Antes isso só acontecia quando o tipster citava um jogador só. Passou a
+    valer sempre porque, quando as duas fontes de dados esportivos falham
+    (SofaScore bloqueado, jogo não listado no 365scores), a casa de apostas
+    é a única que ainda enxerga o jogo — e ela tem tudo que precisamos:
+    os dois nomes, o dia/horário e até o link direto da partida.
+
+    Faz duas coisas, nessa ordem:
+      1. Com o par corrigido pela Superbet (ela resolve typo do tipster e
+         perfil desatualizado de uma vez), tenta CONFIRMAR nas fontes
+         esportivas — que é sempre melhor, porque traz o event_id do
+         SofaScore e o nome oficial do torneio.
+      2. Se nem assim, aceita o próprio card da Superbet como o confronto.
+
+    Devolve (confronto, link_do_card). O link vem junto porque é o link
+    exato da partida naquela casa — melhor que o link aproximado que o
+    adaptador montaria depois.
+    """
+    card = buscar_confronto_na_superbet(jogador1, esporte, odd_tip)
+    if card is None and jogador2:
+        card = buscar_confronto_na_superbet(jogador2, esporte, odd_tip)
+    if card is None:
+        return None, None
+
+    if exigir_hoje and not _card_eh_hoje(card.horario_texto):
+        # A Superbet só lista jogo aberto pra aposta: se o card não é de
+        # hoje, o jogo de hoje deste jogador já acabou e o que sobrou na
+        # busca é o de amanhã. Confirmar por ele grava a aposta no
+        # confronto errado — bug real com "de la torre" (ver docstring de
+        # buscar_confronto_na_superbet).
+        logger.info(
+            "Superbet achou %s x %s, mas o card não é de hoje — "
+            "provavelmente o jogo de hoje já encerrou; ignorando esse card.",
+            card.jogador1, card.jogador2,
+        )
+        return None, None
+
+    # Só vale reconsultar as fontes esportivas se a Superbet trouxe nomes
+    # DIFERENTES dos que já falharam (typo corrigido, apelido expandido).
+    # Se são os mesmos, repetir a consulta é garantir a mesma resposta
+    # negativa gastando o tempo do ciclo — que é justamente o que falta
+    # quando tudo está lento/bloqueado.
+    par_e_novidade = not (
+        ja_tentou_par
+        and jogador2
+        and pair_matches(
+            jogador1, jogador2, card.jogador1, card.jogador2,
+            settings.SUPERBET_FUZZY_THRESHOLD,
+        )
+    )
+    if par_e_novidade:
+        confirmado = _confirmar_par(card.jogador1, card.jogador2, esporte, dias_de_busca, referencia)
+        if confirmado is not None:
+            return confirmado, card.link
+
+    data_hora = _data_hora_do_card(card.horario_texto, referencia)
+    logger.info(
+        "Confronto aceito pela Superbet (nenhuma fonte esportiva confirmou): "
+        "%s x %s | card=%r | horário=%s",
+        card.jogador1, card.jogador2, card.horario_texto, data_hora,
+    )
+    return (
+        CanonicalMatch(
+            jogador1_oficial=card.jogador1,
+            jogador2_oficial=card.jogador2,
+            torneio_oficial=None,   # o card não traz o torneio
+            data_hora=data_hora,
+            sofascore_event_id=None,  # id da Superbet não serve pro SofaScore
+        ),
+        card.link,
+    )
+
+
 def build_enabled_adapters():
     adapters = []
     for slug in settings.BOOKMAKERS:
@@ -231,66 +417,38 @@ def find_match(
     if not jogador1:
         return MatchInfo(encontrado=False, esporte=esporte)
 
-    if jogador2:
-        canonico = find_canonical_match(jogador1, jogador2, esporte=esporte, dias_de_busca=dias_de_busca, referencia=referencia)
+    link_superbet: Optional[str] = None
 
-        # Fallback quando a varredura do dia falha. Ela depende do endpoint
-        # /scheduled-tournaments, que é o primeiro a ser bloqueado quando o
-        # SofaScore devolve 403 pro IP do runner do GitHub Actions — e aí a
-        # aposta ficava "não encontrada" mesmo com os DOIS nomes corretos
-        # em mãos (bug real, 03/09/2026: Qinwen Zheng x Yulia Putintseva,
-        # 15 tentativas 403 seguidas; o mesmo confronto resolve na hora
-        # fora do runner).
-        #
-        # A busca por nome usa /search/all + /team/{id}/featured-event, uma
-        # rota diferente, então costuma passar quando a outra não passa. Só
-        # aceita o resultado se o confronto devolvido bater com os dois
-        # nomes que já tínhamos — sem isso, um homônimo entraria no lugar.
+    if jogador2:
+        # Com os dois nomes em mãos, vale tentar as fontes esportivas
+        # direto (365scores primeiro, ver _confirmar_par).
+        canonico = _confirmar_par(jogador1, jogador2, esporte, dias_de_busca, referencia)
         if canonico is None:
-            for nome in (jogador1, jogador2):
-                candidato = find_canonical_match_by_name(nome, esporte=esporte, referencia=referencia)
-                if candidato and pair_matches(
-                    jogador1, jogador2,
-                    candidato.jogador1_oficial, candidato.jogador2_oficial,
-                    settings.SUPERBET_FUZZY_THRESHOLD,
-                ):
-                    logger.info(
-                        "SofaScore: confronto resolvido pela busca por nome (%r) — "
-                        "a varredura do dia falhou.", nome,
-                    )
-                    canonico = candidato
-                    break
+            # Nenhuma fonte esportiva confirmou. Antes a busca parava aqui
+            # e a aposta nascia "não encontrada" — inclusive quando o único
+            # problema era o SofaScore bloqueando o runner e o jogo não
+            # estar listado no 365scores. A Superbet enxerga o jogo (é onde
+            # a aposta existe, afinal) e resolve de quebra typo do tipster.
+            canonico, link_superbet = _confronto_pela_superbet(
+                jogador1, jogador2, esporte, dias_de_busca, referencia, odd_tip,
+                exigir_hoje=False, ja_tentou_par=True,
+            )
     else:
-        # Só o favorito citado: aqui o SofaScore precisa adivinhar o
-        # adversário, e é exatamente onde ele erra (nome com typo, jogador
-        # com perfil duplicado/desatualizado). Pede a segunda opinião da
-        # Superbet ANTES, porque ela lista só jogos futuros e por isso
-        # resolve typo e perfil velho de uma vez; com o par em mãos, a
-        # busca no SofaScore deixa de ser adivinhação e passa a ser
-        # confirmação de um confronto específico.
-        par_superbet = buscar_confronto_na_superbet(jogador1, esporte, odd_tip)
-        canonico = None
-        if par_superbet:
-            s1, s2, eh_hoje = par_superbet
-            if not eh_hoje:
-                # A Superbet só lista jogo aberto pra aposta: se o card não
-                # é de hoje, o jogo de hoje deste jogador já acabou e o que
-                # sobrou na busca é o de amanhã. Confirmar por ele grava a
-                # aposta no confronto errado — bug real com "de la torre"
-                # (ver docstring de buscar_confronto_na_superbet). Deixa o
-                # SofaScore resolver, que enxerga jogo já encerrado.
-                logger.info(
-                    "Superbet achou %s x %s, mas o card não é de hoje — "
-                    "provavelmente o jogo de hoje já encerrou; usando o SofaScore.",
-                    s1, s2,
-                )
-            else:
-                canonico = find_canonical_match(s1, s2, esporte=esporte, dias_de_busca=dias_de_busca, referencia=referencia)
-                if canonico is None:
-                    logger.info(
-                        "Superbet achou %s x %s, mas o SofaScore não confirmou — "
-                        "seguindo para a busca só por nome.", s1, s2,
-                    )
+        # Só o favorito citado: aqui as fontes esportivas precisariam
+        # adivinhar o adversário, e é exatamente onde elas erram (nome com
+        # typo, jogador com perfil duplicado/desatualizado). A Superbet vem
+        # ANTES porque lista só jogos abertos pra aposta e por isso resolve
+        # typo e perfil velho de uma vez; com o par em mãos, a consulta às
+        # fontes esportivas deixa de ser adivinhação e vira confirmação de
+        # um confronto específico (é o que _confronto_pela_superbet faz).
+        #
+        # exigir_hoje: sem o adversário, um card de amanhã quase sempre
+        # significa que o jogo de hoje desse jogador já acabou — aceitar
+        # gravaria a aposta no confronto errado.
+        canonico, link_superbet = _confronto_pela_superbet(
+            jogador1, None, esporte, dias_de_busca, referencia, odd_tip,
+            exigir_hoje=True,
+        )
         if canonico is None:
             canonico = find_canonical_match_by_name(jogador1, esporte=esporte, referencia=referencia)
 
@@ -308,6 +466,13 @@ def find_match(
     # arriscar um link "exato" errado.
     links: dict = {}
     for adapter in build_enabled_adapters():
+        # Se a própria busca da Superbet já devolveu o card da partida, esse
+        # link é o exato — reaproveita em vez de abrir outro navegador pra
+        # procurar de novo o que já foi achado.
+        if link_superbet and adapter.slug == "superbet":
+            links[adapter.slug] = {"nome": adapter.display_name, "url": link_superbet, "exato": True}
+            logger.info("%s: link %s (exato, reaproveitado da busca)", adapter.slug, link_superbet)
+            continue
         try:
             link = adapter.get_link(j1, j2, torneio, data_hora, esporte)
         except Exception:
