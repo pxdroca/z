@@ -96,7 +96,20 @@ _SYNC_STATE_KEY = "listener_last_message_id"
 # poll do dia (ele costuma mandar as bets de madrugada, ver mensagens
 # 98-103 de 03/09/2026), sem abrir a porta pra reprocessar um grupo antigo
 # inteiro caso TELEGRAM_SOURCE_CHAT aponte pra outro lugar.
-_JANELA_PRIMEIRO_POLL = timedelta(hours=12)
+#
+# 30h e não 12h: o grupo do dia seguinte é criado no FIM DO DIA anterior e
+# já recebe tips ("vou adiantar as nossas bets de madrugada/amanhã cedo
+# agora logo", 04/09/2026 21:02). Se ele cria às 21h e o primeiro poll do
+# grupo só acontece na manhã seguinte — porque é quando você entra —, 12h
+# deixavam as primeiras tips de fora. Medido no grupo real: o Telegram
+# entrega o histórico anterior à entrada (o grupo de 04/09 mostra desde a
+# msg #1, de 03/09 17:35, mesmo tendo sido acessado só às 14:26), então a
+# única coisa que limitava era esta janela.
+#
+# 30h cobre "criado ontem à noite, primeiro poll hoje à tarde" com folga e
+# ainda descarta um grupo genuinamente antigo (o de 2 dias atrás já está
+# fora, e _JANELA_GRUPOS_ATIVOS nem o entrega pra cá).
+_JANELA_PRIMEIRO_POLL = timedelta(hours=30)
 
 # Quando TELEGRAM_SOURCE_CHAT é um PREFIXO de nome, quais grupos com esse
 # prefixo continuam sendo lidos: todos os que tiveram atividade nas últimas
