@@ -418,3 +418,15 @@
     gap: 1.25rem;
   }
 }
+
+/* Item do grid: repassa a altura da linha pro card, pra todos os cards
+   da mesma linha terminarem juntos (ver comentário no BetCard.tsx). */
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.wrapper > .card {
+  flex: 1 1 auto;
+}

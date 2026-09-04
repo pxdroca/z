@@ -346,22 +346,35 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
     const larguraBadge = 190;
     const larguraTexto = LARGURA - PAD - xTexto - larguraBadge - 24;
 
-    // horário — 26px e em text-secondary. Era 22px/muted (menor e mais
-    // apagado que o mercado, que é secundário); 30px passou do ponto e
-    // competia com o nome do confronto.
-    ctx.fillStyle = "#a1a7b3";
-    ctx.font = "700 26px 'JetBrains Mono', monospace";
-    ctx.fillText(bet.data_hora ? formatarHora(bet.data_hora) : "--:--", xTexto, cyCentro - 24);
+    // Sem horário confirmado, a linha não desenha nada no lugar dele: um
+    // "--:--" só chama atenção pra informação que falta. O bloco de texto
+    // (jogo + mercado) sobe pra ocupar o espaço e fica centrado na linha,
+    // em vez de deixar um vazio no topo.
+    const temHora = Boolean(bet.data_hora);
+    const deslocamento = temHora ? 0 : 16;
+
+    if (temHora) {
+      // horário — 26px e em text-secondary. Era 22px/muted (menor e mais
+      // apagado que o mercado, que é secundário); 30px passou do ponto e
+      // competia com o nome do confronto.
+      ctx.fillStyle = "#a1a7b3";
+      ctx.font = "700 26px 'JetBrains Mono', monospace";
+      ctx.fillText(formatarHora(bet.data_hora!), xTexto, cyCentro - 24);
+    }
 
     // confronto (jogo)
     ctx.fillStyle = "#eceef1";
     ctx.font = "700 32px Inter, sans-serif";
-    ctx.fillText(truncar(ctx, bet.jogo, larguraTexto), xTexto, cyCentro + 8);
+    ctx.fillText(truncar(ctx, bet.jogo, larguraTexto), xTexto, cyCentro + 8 - deslocamento);
 
     // mercado
     ctx.fillStyle = "#a1a7b3";
     ctx.font = "500 24px Inter, sans-serif";
-    ctx.fillText(truncar(ctx, bet.mercado || "Mercado não identificado", larguraTexto), xTexto, cyCentro + 40);
+    ctx.fillText(
+      truncar(ctx, bet.mercado || "Mercado não identificado", larguraTexto),
+      xTexto,
+      cyCentro + 40 - deslocamento,
+    );
 
     // badge de resultado, à direita
     const badgeW = 172;

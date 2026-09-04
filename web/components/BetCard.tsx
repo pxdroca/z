@@ -91,7 +91,13 @@ export function BetCard({
   const [salvando, setSalvando] = useState(false);
 
   const temPlacarAoVivo = bet.status === "ao_vivo" && Boolean(bet.placar_final);
-  const temResultadoFinal = bet.status === "encerrada" && Boolean(bet.placar_final);
+  // Vencedor OU placar já bastam pra mostrar a área de resultado. Exigir
+  // placar escondia o bloco inteiro no basquete: o 365scores não devolve
+  // placar por quarto (só o vencedor), então a aposta encerrada ficava sem
+  // nenhuma informação de resultado e o card saía mais baixo que os
+  // vizinhos, desalinhando a linha do grid.
+  const temResultadoFinal =
+    bet.status === "encerrada" && Boolean(bet.placar_final || bet.vencedor_partida);
   const corResultado = COR_RESULTADO[bet.resultado];
 
   async function handleChangeStatus(novo: BetStatus) {
@@ -113,7 +119,11 @@ export function BetCard({
   }
 
   return (
-    <div>
+    // O wrapper é o item do grid (que usa grid-auto-rows: 1fr, ver
+    // page.module.css) e precisa repassar a altura esticada pro card —
+    // sem isso o card só cresce até o conteúdo e cards com menos
+    // informação (ex: basquete sem placar por quarto) saíam mais baixos.
+    <div className={styles.wrapper}>
       {/* data-resultado alimenta o glow ambiental do canto (ver
           BetCard.module.css). Fica num atributo em vez de classe pra o
           CSS resolver a cor sozinho — nenhuma lógica de cor no TSX. */}
@@ -187,7 +197,11 @@ export function BetCard({
               <ResultadoIcon resultado={bet.resultado} size={12} />
               {bet.vencedor_partida || "?"} venceu
             </div>
-            <div className={styles.resultadoPlacar}>{formatarPlacar(bet.placar_final!)}</div>
+            {/* Só quando existe: no basquete o placar por quarto não vem
+                do 365scores, e a linha ficaria vazia. */}
+            {bet.placar_final ? (
+              <div className={styles.resultadoPlacar}>{formatarPlacar(bet.placar_final)}</div>
+            ) : null}
           </div>
         ) : null}
 
