@@ -88,6 +88,26 @@ mercado null (tipo_aposta "simples", odd null se não achar). Só preencha
 jogador1/mercado a partir de texto puro (sem imagem) quando houver uma odd
 numérica clara acompanhando o nome (ex: "Hurkacz odd: 2.85").
 
+IMPORTANTE 2 — print de CONVERSA não é tip, mesmo tendo bet-slip dentro.
+O tipster às vezes manda o screenshot de um chat (dele com outra pessoa, ou
+de outro grupo) em que aparece a aposta de TERCEIROS. Sinais de que o print
+é uma conversa, e não a tip dele:
+
+  - @ de outra pessoa, nome de usuário, "Imin"/"2h"/"agora" (marcador de
+    tempo de mensagem), balões de chat;
+  - valores em dinheiro que não são a praxe do tipster: "APOSTA 230,00 R$",
+    "PRÊMIO 920,00 R$", "ODDS TOTAIS";
+  - várias apostas diferentes empilhadas, às vezes em LADOS OPOSTOS do
+    mesmo jogo (uma no time A, outra no handicap do time B) — a tip dele é
+    sempre UMA seleção;
+  - texto de comentário em volta ("Odd 5.15 pra acordar forrado? Vc é
+    bizarro").
+
+Nesses casos devolva jogador1, jogador2 e mercado null: é conversa sobre
+aposta, não uma aposta nova. Caso real (04/09/2026): um print assim virou
+uma tip no "Tianjin Pioneers", que era justamente o ADVERSÁRIO do time em
+que o tipster havia apostado.
+
 Responda SOMENTE com um JSON válido, sem markdown, sem comentários, no formato
 exato:
 
@@ -499,6 +519,28 @@ def _normaliza_numero_set(numero: str) -> str:
     return _SET_NUMERO_POR_EXTENSO.get(numero.lower(), numero)
 
 
+# Sinais de que o print é uma CONVERSA sobre aposta (screenshot de chat,
+# bet-slip de outra pessoa), não a tip do tipster. Ver o bloco
+# "IMPORTANTE 2" em _GEMINI_PROMPT para os exemplos reais.
+#
+# Bug real (04/09/2026): a mensagem 245 era um screenshot de outra pessoa
+# comentando a tip ("Odd 5.15 pra acordar forrado? Vc é bizarro"), com as
+# apostas DELA dentro — inclusive uma no Tianjin Pioneers, o ADVERSÁRIO do
+# time em que o tipster apostou. Virou uma aposta no painel.
+#
+# "aposta N,NN R$" / "prêmio" / "odds totais" são de bet-slip de terceiro:
+# o tipster nunca manda valor em dinheiro, só a odd.
+_CONVERSA_PATTERN = re.compile(
+    r"aposta\s+[\d.,]+\s*R\$|pr[êe]mio\s+[\d.,]+|odds?\s+totais",
+    re.IGNORECASE,
+)
+
+
+def parece_print_de_conversa(texto: Optional[str]) -> bool:
+    """O texto tem cara de screenshot de conversa com aposta de terceiros?"""
+    return bool(texto and _CONVERSA_PATTERN.search(texto))
+
+
 _FAVORITO_IGNORE_WORDS = {
     "aposta", "ao", "vivo", "live", "odd", "cota", "green", "red", "tip",
     # Pronomes/artigos/verbos comuns que aparecem capitalizados no início
@@ -731,6 +773,20 @@ def parse_free_text(texto: str) -> ExtractedBet:
             "(provável mensagem de conversa, não tip).", texto[:80], jogador1,
         )
         jogador1 = None
+        mercado = None
+
+    # Print de CONVERSA (screenshot de chat com bet-slip de terceiros):
+    # descarta o confronto inteiro. Ver parece_print_de_conversa — o texto
+    # traz valores em dinheiro e apostas de outra pessoa, às vezes no lado
+    # OPOSTO do jogo em que o tipster apostou.
+    if parece_print_de_conversa(texto) and (jogador1 or jogador2 or mercado):
+        logger.info(
+            "Texto parece print de conversa (bet-slip de terceiros) — descartando "
+            "confronto/mercado extraídos: %r x %r / %r",
+            jogador1, jogador2, mercado,
+        )
+        jogador1 = None
+        jogador2 = None
         mercado = None
 
     confianca = 0.0
