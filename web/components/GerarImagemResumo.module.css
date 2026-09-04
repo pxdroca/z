@@ -249,8 +249,15 @@
     align-items: flex-end;
   }
 
+  /* `height: auto` explícito: no mobile o overlay usa
+     `align-items: flex-end`, e um flex item alinhado assim herda
+     `align-self: flex-end` — o que faz o painel ESTICAR até 88vh mesmo
+     com imagem curta, deixando um vazio entre a prévia e os botões (era o
+     "botões grudados no topo da seção"). Com altura automática o painel
+     encolhe até o conteúdo e os botões sobem junto. */
   .painel {
     width: 100%;
+    height: auto;
     max-height: 88vh;
   }
 

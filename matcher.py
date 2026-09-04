@@ -279,6 +279,53 @@ def _data_hora_do_card(horario_texto: str, referencia: Optional[datetime]) -> Op
     return inicio.astimezone(timezone.utc)
 
 
+def _completar_event_id(
+    canonico: CanonicalMatch,
+    esporte: str,
+    dias_de_busca: int,
+    referencia: Optional[datetime],
+) -> CanonicalMatch:
+    """Tenta preencher o sofascore_event_id de um confronto já confirmado.
+
+    Serve pros confrontos que vieram do 365scores ou da Superbet, que não
+    têm esse id. Ter o id faz o score_updater consultar o placar por ID
+    (exato) em vez de por nome (fuzzy, e sujeito a divergência de grafia
+    entre fontes).
+
+    Nunca troca o confronto: só aproveita o id quando o jogo que o
+    SofaScore devolve é o MESMO (pair_matches sobre os nomes oficiais).
+    Falha em silêncio — sem o id o pipeline continua funcionando.
+    """
+    if canonico.sofascore_event_id is not None:
+        return canonico
+
+    try:
+        do_sofascore = find_canonical_match(
+            canonico.jogador1_oficial, canonico.jogador2_oficial,
+            esporte=esporte, dias_de_busca=dias_de_busca, referencia=referencia,
+        )
+    except Exception:
+        logger.debug("Busca do event_id no SofaScore falhou — seguindo sem ele.", exc_info=True)
+        return canonico
+
+    if do_sofascore is None or do_sofascore.sofascore_event_id is None:
+        return canonico
+
+    if not pair_matches(
+        canonico.jogador1_oficial, canonico.jogador2_oficial,
+        do_sofascore.jogador1_oficial, do_sofascore.jogador2_oficial,
+        settings.SUPERBET_FUZZY_THRESHOLD,
+    ):
+        return canonico
+
+    logger.info(
+        "event_id %s obtido no SofaScore para %s x %s (confronto veio de outra fonte).",
+        do_sofascore.sofascore_event_id, canonico.jogador1_oficial, canonico.jogador2_oficial,
+    )
+    canonico.sofascore_event_id = do_sofascore.sofascore_event_id
+    return canonico
+
+
 def _confirmar_par(
     jogador1: str,
     jogador2: str,
@@ -309,6 +356,21 @@ def _confirmar_par(
         jogador1, jogador2, threshold, esporte=esporte, referencia=referencia,
     )
     if canonico is not None:
+        # O 365scores confirma o confronto mas NÃO devolve event_id do
+        # SofaScore (é id de outro site). Sem event_id, o score_updater
+        # acompanha o placar por NOME, que é mais frágil: se o nome
+        # divergir entre as fontes, o resultado nunca fecha e a aposta fica
+        # "ao vivo" pra sempre.
+        #
+        # Medido em 04/09/2026: 14 das 15 apostas do dia estavam sem
+        # event_id, porque o 365scores é a primeira fonte e o SofaScore
+        # nunca era consultado.
+        #
+        # Então: usa os nomes OFICIAIS que o 365scores devolveu (melhores
+        # que os do OCR) pra tentar o event_id no SofaScore. Se falhar,
+        # segue com o confronto do 365scores — o event_id é um bônus, não
+        # requisito.
+        canonico = _completar_event_id(canonico, esporte, dias_de_busca, referencia)
         return canonico
 
     canonico = find_canonical_match(
