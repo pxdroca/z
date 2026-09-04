@@ -495,23 +495,29 @@ function desenharLuzDoCanto(
   ctx.fillStyle = nucleo;
   ctx.fillRect(x, y, w, h);
 
-  // 3) as duas bordas iluminadas, cada uma sumindo ao longo do trajeto —
-  // é isso que dá a leitura de "luz correndo pela borda" em vez de um
-  // halo redondo colado no canto. É a camada mais visível das três, e a
-  // que faz o trabalho: fica no fio da borda (1.5px), então pode ter alfa
-  // alto sem pintar área nenhuma.
-  const bordaTopo = ctx.createLinearGradient(x, y, x + Math.min(w * 0.45, 340), y);
-  bordaTopo.addColorStop(0, `rgba(${luzRgb}, 0.62)`);
-  bordaTopo.addColorStop(1, `rgba(${luzRgb}, 0)`);
-  ctx.fillStyle = bordaTopo;
-  ctx.fillRect(x, y, w, 1.5);
+  ctx.restore();
 
-  const bordaEsq = ctx.createLinearGradient(x, y, x, y + Math.min(h * 0.42, 200));
-  bordaEsq.addColorStop(0, `rgba(${luzRgb}, 0.55)`);
-  bordaEsq.addColorStop(1, `rgba(${luzRgb}, 0)`);
-  ctx.fillStyle = bordaEsq;
-  ctx.fillRect(x, y, 1.5, h);
-
+  // 3) a borda iluminada, seguindo o CONTORNO do card.
+  //
+  // Antes eram dois fillRect (uma faixa no topo e outra na esquerda).
+  // Faixa é reta e o card é arredondado: o clip() cortava as duas na
+  // curva, e cada uma terminava em BICO — as "quinas com falha". Agora é
+  // um stroke sobre o mesmo roundRect, com um gradiente diagonal que sai
+  // do canto e some; a linha acompanha o arredondamento e não tem ponta.
+  //
+  // Fora do clip de propósito: o traço fica centrado na borda, metade
+  // pra dentro e metade pra fora, o que é justamente o que dá a
+  // impressão de luz na superfície do vidro.
+  ctx.save();
+  const alcanceBorda = Math.min(Math.max(w, h) * 0.6, 460);
+  const linha = ctx.createLinearGradient(x, y, x + alcanceBorda, y + alcanceBorda);
+  linha.addColorStop(0, `rgba(${luzRgb}, 0.75)`);
+  linha.addColorStop(0.35, `rgba(${luzRgb}, 0.28)`);
+  linha.addColorStop(1, `rgba(${luzRgb}, 0)`);
+  ctx.strokeStyle = linha;
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x, y, w, h, raioCanto);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -892,9 +898,20 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
   const altura = HEADER_ALTURA + alturaLista + FOOTER_ALTURA;
 
   const canvas = document.createElement("canvas");
-  const escala = 2; // desenha em 2x e escala via CSS/atributo — texto nítido em telas retina
-  canvas.width = LARGURA * escala;
-  canvas.height = altura * escala;
+  /* Escala do canvas: quantos pixels reais por unidade de layout.
+   *
+   * Era 2 (2160px de largura, ~11 megapixels com 20 apostas). Parece
+   * "mais qualidade", mas produz o contrário no destino real: Telegram e
+   * WhatsApp reduzem qualquer imagem grande na hora do envio, e quanto
+   * maior o fator de redução, mais o texto se desfaz. 1.5 entrega 1620px
+   * de largura — acima do que esses apps entregam ao destinatário, e
+   * perto o bastante pra redução final ser suave em vez de destrutiva.
+   *
+   * O texto continua nítido: o desenho é vetorial, e 1.5x já dá
+   * subpixel suficiente pra fonte de 21px do mercado. */
+  const escala = 1.5;
+  canvas.width = Math.round(LARGURA * escala);
+  canvas.height = Math.round(altura * escala);
   const ctx = canvas.getContext("2d")!;
   ctx.scale(escala, escala);
 

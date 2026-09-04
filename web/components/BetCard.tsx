@@ -138,6 +138,10 @@ export function BetCard({
         {/* Lensing de borda do vidro (ver BetCard.module.css) — puramente
             decorativo, precisa de elemento próprio por causa do mask. */}
         <span className={styles.lensing} aria-hidden="true" />
+        {/* Borda acesa na cor do resultado, na quina superior-esquerda.
+            Elemento próprio pelo mesmo motivo do lensing: o recorte da
+            moldura depende de mask, que precisa de uma camada só dela. */}
+        <span className={styles.bordaLuz} aria-hidden="true" />
         <div className={styles.topRow}>
           <span className={styles.statusInline} style={{ color: corResultado }}>
             <ResultadoIcon resultado={bet.resultado} />

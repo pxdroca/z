@@ -65,6 +65,65 @@
   z-index: 0;
 }
 
+/* Borda COLORIDA na quina superior-esquerda, no tom do resultado.
+
+   A borda do card é branca translúcida (--glass-border) e não muda com o
+   resultado; o glow do ::before fica ATRÁS do vidro, então a aresta em si
+   continuava cinza. Esta camada pinta o fio da borda com um gradiente
+   diagonal que sai da quina e some — mesma linguagem da imagem-resumo,
+   onde a luz corre pela borda em vez de ficar num halo.
+
+   Usa mask pra recortar só a moldura de 1.5px: sem isso o gradiente
+   pintaria o card inteiro. */
+.bordaLuz {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(
+    135deg,
+    var(--borda-luz, transparent) 0%,
+    color-mix(in srgb, var(--borda-luz, transparent) 35%, transparent) 30%,
+    transparent 62%
+  );
+  /* Recorta o miolo e deixa só a moldura. */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.9;
+  transition: opacity 0.18s ease;
+  z-index: 1;
+}
+
+.card:hover .bordaLuz {
+  opacity: 1;
+}
+
+.card[data-resultado="green"],
+.card[data-resultado="cashout"] {
+  --borda-luz: rgba(52, 211, 153, 0.85);
+}
+
+.card[data-resultado="red"] {
+  --borda-luz: rgba(248, 113, 113, 0.8);
+}
+
+.card[data-resultado="void"] {
+  --borda-luz: rgba(156, 163, 175, 0.6);
+}
+
+/* Ao vivo em âmbar: o resultado ainda é "pendente", então a cor tem que
+   vir do status da partida — senão um jogo rolando acende cinza. */
+.card[data-status="ao_vivo"] {
+  --borda-luz: rgba(251, 191, 36, 0.85);
+}
+
+.card[data-status="agendada"][data-resultado="pendente"] {
+  --borda-luz: rgba(156, 163, 175, 0.5);
+}
+
 /* Lensing de borda — moldura de 1.5px recortada por mask, com a luz mais
    forte nas quinas superior-esquerda e inferior-direita (luz de cima
    entortando na aresta). Fica num elemento próprio porque `mask` recorta
@@ -98,7 +157,7 @@
 
 /* Conteúdo acima das camadas de luz. O :not() preserva a camada de
    lensing no fundo — ela é filha do card mas não é conteúdo. */
-.card > *:not(.lensing) {
+.card > *:not(.lensing):not(.bordaLuz) {
   position: relative;
   z-index: 1;
 }
