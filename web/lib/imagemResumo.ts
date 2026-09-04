@@ -249,14 +249,12 @@ function desenharEstatisticas(ctx: CanvasRenderingContext2D, jogos: Bet[], y: nu
  *  (o chamador decide o que fazer com ele: preview, toBlob, download). */
 export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
   const jogos = jogosDeHoje(bets);
-  // Altura mínima 16:9 "invertido" (retrato, tipo Stories) — em dias com
-  // poucos jogos a lista sozinha não preenche o suficiente pra imagem
-  // parecer vertical; o espaço sobrando fica como respiro abaixo do rodapé
-  // em vez de deixar a imagem quase quadrada.
-  const alturaConteudo =
-    HEADER_ALTURA + Math.max(jogos.length, 1) * LINHA_ALTURA + FOOTER_ALTURA;
-  const alturaMinimaRetrato = Math.round((LARGURA * 16) / 9);
-  const altura = Math.max(alturaConteudo, alturaMinimaRetrato);
+  // A imagem acompanha o conteúdo: nada de piso de 16:9. O piso existia
+  // pra "garantir formato vertical", mas com poucas apostas ele deixava
+  // metade da imagem vazia embaixo do rodapé (6 apostas ocupavam ~1150px
+  // numa imagem de 1920). Com 1080 de largura, qualquer lista de 3+
+  // apostas já sai naturalmente em retrato.
+  const altura = HEADER_ALTURA + Math.max(jogos.length, 1) * LINHA_ALTURA + FOOTER_ALTURA;
 
   const canvas = document.createElement("canvas");
   const escala = 2; // desenha em 2x e escala via CSS/atributo — texto nítido em telas retina

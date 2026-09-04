@@ -56,7 +56,7 @@ from playwright.sync_api import Page, sync_playwright
 from zoneinfo import ZoneInfo
 
 from models import Esporte
-from nameutils import pair_matches
+from nameutils import names_match, pair_matches
 from sofascore_client import CanonicalMatch, EventStatus
 
 logger = logging.getLogger(__name__)
@@ -273,7 +273,7 @@ def _game_to_status(game: dict) -> EventStatus:
 
 def find_canonical_match_365(
     jogador1: str,
-    jogador2: str,
+    jogador2: Optional[str],
     threshold: int,
     esporte: str = Esporte.TENIS.value,
     dias_de_busca: int = 2,
@@ -312,7 +312,19 @@ def find_canonical_match_365(
                 away = (game.get("awayCompetitor") or {}).get("name", "")
                 if not home or not away:
                     continue
-                if pair_matches(jogador1, jogador2, home, away, threshold):
+                # jogador2 pode ser None (o tipster citou só o favorito).
+                # pair_matches exige os DOIS nomes e nunca casa nesse caso —
+                # bug real (04/09/2026): a tip "Trotter odd 1.50" ficou
+                # "não encontrada" mesmo com o jogo listado aqui, porque a
+                # busca era feita sem adversário. Sem jogador2, basta um dos
+                # lados bater com jogador1.
+                if jogador2:
+                    casou = pair_matches(jogador1, jogador2, home, away, threshold)
+                else:
+                    casou = names_match(jogador1, home, threshold) or names_match(
+                        jogador1, away, threshold
+                    )
+                if casou:
                     candidato = CanonicalMatch(
                         jogador1_oficial=home,
                         jogador2_oficial=away,

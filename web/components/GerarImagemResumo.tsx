@@ -13,14 +13,25 @@ const NOME_ARQUIVO = "jogos-do-dia.png";
 /** Filtro de quais apostas entram na imagem. "todas" mantém o
  *  comportamento anterior; os demais recortam por grupo (o mesmo
  *  agrupamento do painel, ver lib/agrupamento.ts). */
-type FiltroImagem = "todas" | GrupoId;
+type FiltroImagem = "todas" | GrupoId | "em_aberto";
+
+/** Grupos que cada opção do filtro aceita. "Em aberto" junta pendentes e
+ *  ao vivo: das duas o resultado ainda não saiu, e separá-las dava duas
+ *  listas curtas quando o interessante é "o que ainda está em jogo". */
+const GRUPOS_DO_FILTRO: Record<Exclude<FiltroImagem, "todas">, GrupoId[]> = {
+  green: ["green"],
+  red: ["red"],
+  void: ["void"],
+  ao_vivo: ["ao_vivo"],
+  pendentes: ["pendentes"],
+  em_aberto: ["pendentes", "ao_vivo"],
+};
 
 const OPCOES_FILTRO: { id: FiltroImagem; label: string }[] = [
   { id: "todas", label: "Todas" },
   { id: "green", label: "Green" },
   { id: "red", label: "Red" },
-  { id: "ao_vivo", label: "Ao vivo" },
-  { id: "pendentes", label: "Pendentes" },
+  { id: "em_aberto", label: "Em aberto" },
 ];
 
 /**
@@ -76,8 +87,8 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
     setAberto(true);
     setAviso(null);
     try {
-      const selecionadas =
-        alvo === "todas" ? bets : bets.filter((b) => grupoDaBet(b) === alvo);
+      const aceitos = alvo === "todas" ? null : GRUPOS_DO_FILTRO[alvo];
+      const selecionadas = aceitos ? bets.filter((b) => aceitos.includes(grupoDaBet(b))) : bets;
       const canvas = desenharResumoDoDia(selecionadas);
       const blob = await canvasParaBlob(canvas);
       blobRef.current = blob;
