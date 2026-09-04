@@ -73,26 +73,29 @@
    diagonal que sai da quina e some — mesma linguagem da imagem-resumo,
    onde a luz corre pela borda em vez de ficar num halo.
 
-   Usa mask pra recortar só a moldura de 1.5px: sem isso o gradiente
-   pintaria o card inteiro. */
+   Usa mask pra recortar só a moldura: sem isso o gradiente pintaria o
+   card inteiro. */
 .bordaLuz {
   position: absolute;
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  padding: 1.5px;
+  /* 1px, não 1.5: esta moldura fica EM CIMA da do .lensing, e as duas
+     somadas davam uma barra de 2px CSS de verde saturado atravessando o
+     topo do card — lida como "brilho vazando", não como borda acesa. */
+  padding: 1px;
   background: linear-gradient(
     135deg,
     var(--borda-luz, transparent) 0%,
-    color-mix(in srgb, var(--borda-luz, transparent) 35%, transparent) 30%,
-    transparent 62%
+    color-mix(in srgb, var(--borda-luz, transparent) 28%, transparent) 26%,
+    transparent 55%
   );
   /* Recorta o miolo e deixa só a moldura. */
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  opacity: 0.9;
+  opacity: 0.7;
   transition: opacity 0.18s ease;
   z-index: 1;
 }
@@ -103,25 +106,25 @@
 
 .card[data-resultado="green"],
 .card[data-resultado="cashout"] {
-  --borda-luz: rgba(52, 211, 153, 0.85);
+  --borda-luz: rgba(52, 211, 153, 0.62);
 }
 
 .card[data-resultado="red"] {
-  --borda-luz: rgba(248, 113, 113, 0.8);
+  --borda-luz: rgba(248, 113, 113, 0.58);
 }
 
 .card[data-resultado="void"] {
-  --borda-luz: rgba(156, 163, 175, 0.6);
+  --borda-luz: rgba(156, 163, 175, 0.42);
 }
 
 /* Ao vivo em âmbar: o resultado ainda é "pendente", então a cor tem que
    vir do status da partida — senão um jogo rolando acende cinza. */
 .card[data-status="ao_vivo"] {
-  --borda-luz: rgba(251, 191, 36, 0.85);
+  --borda-luz: rgba(251, 191, 36, 0.62);
 }
 
 .card[data-status="agendada"][data-resultado="pendente"] {
-  --borda-luz: rgba(156, 163, 175, 0.5);
+  --borda-luz: rgba(156, 163, 175, 0.35);
 }
 
 /* Lensing de borda — moldura de 1.5px recortada por mask, com a luz mais
@@ -480,61 +483,17 @@
 
 /* Item do grid: repassa a altura da linha pro card, pra todos os cards
    da mesma linha terminarem juntos (ver comentário no BetCard.tsx). */
-/* Brilho ESCAPANDO pela quina superior-esquerda.
+/* Não há brilho externo aqui de propósito.
 
-   Vive no .wrapper e não no .card porque o card tem `overflow: hidden`
-   (necessário pros pseudo-elementos de luz não vazarem do raio) — e era
-   isso que cortava o brilho rente à borda, o mesmo defeito que a
-   imagem-resumo tinha. Aqui a luz nasce fora do card e some em
-   gradiente, então a quina fica com a luz inteira.
+   Uma versão anterior punha um disco de luz no .wrapper (por fora do
+   card, pra escapar do `overflow: hidden`). Ele VAZAVA: com 9rem de
+   diâmetro e blur, a maior parte caía fora do card e virava uma mancha
+   colorida flutuando ao lado dele, além de uma barra sólida cruzando a
+   borda superior.
 
-   A cor vem de --status-glow, definida por [data-resultado] no card, e
-   é herdada via .wrapper:has() abaixo — mesma paleta da imagem. */
-.wrapper::before {
-  content: "";
-  position: absolute;
-  top: -0.75rem;
-  left: -0.75rem;
-  width: 9rem;
-  height: 9rem;
-  pointer-events: none;
-  z-index: 0;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, var(--glow-externo, transparent), transparent 62%);
-  filter: blur(14px);
-  opacity: 0.85;
-  transition: opacity 0.18s ease;
-}
-
-/* Cada resultado acende a quina na sua cor. Os mesmos tons da
-   imagem-resumo (lib/imagemResumo.ts), pra tela e imagem falarem igual. */
-.wrapper:has(.card[data-resultado="green"]),
-.wrapper:has(.card[data-resultado="cashout"]) {
-  --glow-externo: rgba(52, 211, 153, 0.4);
-}
-
-.wrapper:has(.card[data-resultado="red"]) {
-  --glow-externo: rgba(248, 113, 113, 0.38);
-}
-
-.wrapper:has(.card[data-resultado="void"]) {
-  --glow-externo: rgba(156, 163, 175, 0.3);
-}
-
-/* Ao vivo em âmbar (o card usa data-status pra isso, não data-resultado:
-   "ao vivo" é estado da PARTIDA, e o resultado dela ainda é pendente). */
-.wrapper:has(.card[data-status="ao_vivo"]) {
-  --glow-externo: rgba(251, 191, 36, 0.4);
-}
-
-.wrapper:hover::before {
-  opacity: 1;
-}
-
+   Quem acende a quina agora é .bordaLuz, que pinta o fio da própria
+   borda por dentro do raio — sem nada fora dos limites do card. */
 .wrapper {
-  /* relative: é o bloco de contenção do ::before que acende a quina
-     (ver acima) — sem isso o brilho se ancoraria na viewport. */
-  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
