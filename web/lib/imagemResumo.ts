@@ -9,6 +9,18 @@ import type { Bet } from "./types";
 
 const FUSO_PADRAO = "America/Sao_Paulo";
 
+/**
+ * Idade máxima de uma aposta SEM horário confirmado para ela entrar no
+ * resumo do dia.
+ *
+ * 24h: cobre a tip que o tipster manda de madrugada para o jogo do dia
+ * seguinte (as de 04/09 foram lançadas 23:28 e 23:42 de 03/09, hora de
+ * Brasília) sem alcançar aposta antiga que segue em aberto — a múltipla
+ * de odd 129 de 03/09, por exemplo, que sem esse teto aparecia no resumo
+ * de 04/09 como "pendente".
+ */
+const JANELA_SEM_HORARIO = 24 * 60 * 60 * 1000;
+
 /** "Hoje" no fuso de Brasília — mesmo critério usado no filtro padrão do
  *  painel (app/page.tsx), pra bater com o que o usuário já vê como "hoje". */
 function diaNoFuso(iso: string, fuso: string): string {
@@ -17,9 +29,35 @@ function diaNoFuso(iso: string, fuso: string): string {
   );
 }
 
-/** Jogos de hoje, ordenados por horário — apostas sem data_hora (erro de
- *  extração, não encontrada) não têm "hoje" pra comparar, então ficam fora
- *  do resumo (não fazem sentido numa imagem organizada por horário). */
+/**
+ * Apostas do dia, ordenadas por horário.
+ *
+ * Entram duas coisas: as com jogo marcado para hoje E as que foram
+ * LANÇADAS hoje sem horário conhecido. O segundo caso existe porque
+ * `data_hora` só é preenchido quando alguma fonte confirma o confronto —
+ * uma aposta de liga que nenhuma fonte cobre (a de basquete da CBA
+ * chinesa), uma múltipla (que não tem um confronto único) ou uma tip cujo
+ * nome o OCR truncou ficam sem horário para sempre.
+ *
+ * Bug real (04/09/2026): o filtro exigia `data_hora`, e por isso 4 das 8
+ * apostas já decididas do dia não apareciam na imagem — inclusive a ÚNICA
+ * red e o green do basquete. O resumo mostrava 4 greens e nenhum red, o
+ * que dá uma leitura errada do dia. Uma aposta com resultado decidido
+ * pertence ao resumo, tenha horário ou não.
+ *
+ * Para as sem horário o critério NÃO pode ser "criada hoje": o tipster
+ * manda as tips de madrugada, e as duas desse caso foram lançadas 23:28 e
+ * 23:42 de 03/09 (Brasília) para jogos de 04/09 — "criada hoje" as
+ * excluiria de novo. Também não pode ser "entra tudo": isso arrastava
+ * para a imagem a múltipla de odd 129 de ontem, ainda pendente.
+ *
+ * O critério é uma JANELA a partir de quando a aposta foi lançada
+ * (JANELA_SEM_HORARIO): cobre a tip da madrugada anterior sem alcançar
+ * as apostas antigas que continuam em aberto.
+ *
+ * As sem horário vão para o fim da lista (a imagem é organizada por
+ * horário; sem ele, não há onde encaixá-las no meio).
+ */
 export function jogosDeHoje(bets: Bet[]): Bet[] {
   const hoje = new Intl.DateTimeFormat("en-CA", {
     timeZone: FUSO_PADRAO,
@@ -28,10 +66,19 @@ export function jogosDeHoje(bets: Bet[]): Bet[] {
     day: "2-digit",
   }).format(new Date());
 
-  return bets
-    .filter((b) => b.data_hora && diaNoFuso(b.data_hora, FUSO_PADRAO) === hoje)
-    .slice()
-    .sort((a, b) => new Date(a.data_hora!).getTime() - new Date(b.data_hora!).getTime());
+  const agora = Date.now();
+
+  const doDia = bets.filter((b) => {
+    if (b.data_hora) return diaNoFuso(b.data_hora, FUSO_PADRAO) === hoje;
+    if (!b.criado_em) return false;
+    // Sem horário confirmado: vale pela idade da aposta.
+    return agora - new Date(b.criado_em).getTime() <= JANELA_SEM_HORARIO;
+  });
+
+  const instante = (b: Bet): number =>
+    b.data_hora ? new Date(b.data_hora).getTime() : Number.POSITIVE_INFINITY;
+
+  return doDia.slice().sort((a, b) => instante(a) - instante(b));
 }
 
 function formatarHora(iso: string): string {
