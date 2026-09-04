@@ -132,8 +132,10 @@ function periodoDaBet(bet: Bet): PeriodoId {
   const h = horaNoFuso(bet.data_hora);
   // Madrugada conta como manhã: 01:55 e 02:43 são "cedo", não uma quarta
   // seção — e o tipster trata as duas coisas como a mesma tanda de tips.
+  //
+  // Noite a partir das 18h (não 17h): 17:00 e 17:30 ainda são tarde.
   if (h < 12) return "manha";
-  if (h < 17) return "tarde";
+  if (h < 18) return "tarde";
   return "noite";
 }
 
@@ -426,9 +428,51 @@ function desenharLuzDoCanto(
   raioCanto: number,
   luzRgb: string,
 ): void {
+  // Halo POR FORA do card: a luz escapando pela quina, que o clip()
+  // sozinho cortava — o brilho batia na borda e parava seco.
+  //
+  // Feito com shadowBlur sobre o próprio roundRect (e não com um
+  // fillRect de gradiente, que desenhava um QUADRADO visível ao lado do
+  // card arredondado — pior que o corte que vinha corrigir): a sombra
+  // acompanha a forma real do card. O deslocamento negativo joga o
+  // brilho pra cima e pra esquerda, que é de onde a luz vem.
+  // Desenhado numa camada própria e depois esmaecido com um gradiente
+  // radial: recortar a região do canto com rect()+clip() deixava uma
+  // ARESTA RETA visível onde o corte terminava. Com a máscara radial o
+  // brilho perde força gradualmente conforme se afasta da quina, sem
+  // nenhuma borda dura.
+  const camada = document.createElement("canvas");
+  camada.width = Math.ceil(w) + BLOCO_GLOW * 2;
+  camada.height = Math.ceil(h) + BLOCO_GLOW * 2;
+  const cctx = camada.getContext("2d");
+  if (cctx) {
+    // Coordenadas locais da camada (a origem do card fica em BLOCO_GLOW).
+    const lx = BLOCO_GLOW;
+    const ly = BLOCO_GLOW;
+
+    cctx.shadowColor = `rgba(${luzRgb}, 0.6)`;
+    cctx.shadowBlur = BLOCO_GLOW * 2;
+    cctx.shadowOffsetX = -3;
+    cctx.shadowOffsetY = -3;
+    cctx.strokeStyle = `rgba(${luzRgb}, 0.3)`;
+    cctx.lineWidth = 1;
+    roundRect(cctx, lx, ly, w, h, raioCanto);
+    cctx.stroke();
+
+    // Máscara: mantém o que está perto da quina, apaga o resto.
+    cctx.globalCompositeOperation = "destination-in";
+    const mascara = cctx.createRadialGradient(lx, ly, 0, lx, ly, BLOCO_GLOW * 9);
+    mascara.addColorStop(0, "rgba(0,0,0,1)");
+    mascara.addColorStop(0.55, "rgba(0,0,0,0.45)");
+    mascara.addColorStop(1, "rgba(0,0,0,0)");
+    cctx.fillStyle = mascara;
+    cctx.fillRect(0, 0, camada.width, camada.height);
+
+    ctx.drawImage(camada, x - BLOCO_GLOW, y - BLOCO_GLOW);
+  }
+
   ctx.save();
-  // Recorta no formato do card: a luz vive DENTRO do vidro, então não pode
-  // vazar pelos cantos arredondados.
+  // Recorta no formato do card: o resto da luz vive DENTRO do vidro.
   roundRect(ctx, x, y, w, h, raioCanto);
   ctx.clip();
 
@@ -483,12 +527,21 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 const LARGURA = 1080; // formato vertical estilo Stories — 1080 é a largura padrão de export mobile
 const PAD = 56;
-const LINHA_ALTURA = 132;
+/* Linhas mais compactas (era 132) pra segurar a altura total.
+   Com 20 apostas a imagem chegava a 2160x6488 — 14 megapixels, proporção
+   1:3 — e o Telegram/WhatsApp recomprimem isso ao enviar, encolhendo a
+   imagem INTEIRA até o texto ficar ilegível. Era a "qualidade baixa"
+   percebida: a perda não é do desenho, é da recompressão que a altura
+   provoca. 108px mantém as duas linhas de texto folgadas. */
+const LINHA_ALTURA = 108;
 /** Cabeçalho de cada seção de período ("MANHÃ", "TARDE"...). */
-const PERIODO_HEADER_ALTURA = 74;
+const PERIODO_HEADER_ALTURA = 66;
 /** Respiro entre o fim de um bloco de período e o cabeçalho do próximo. */
-const PERIODO_GAP = 26;
+const PERIODO_GAP = 22;
 const BLOCO_RAIO = 22;
+/* Margem interna do canvas reservada pro brilho dos cantos poder
+   extravasar sem ser cortado — ver desenharLuzDoCanto. */
+const BLOCO_GLOW = 18;
 /* Header mais alto porque agora abriga o grid 2x2 de estatísticas à
    direita do título (antes elas ficavam numa faixa própria de 150px
    abaixo, que custava altura e deixava um vazio ao lado do título). */
@@ -766,11 +819,14 @@ function desenharLinhaDoJogo(
     ctx.font = "700 25px 'JetBrains Mono', monospace";
     ctx.fillText(formatarHora(bet.data_hora), xHora + larguraHora, cyCentro);
   } else {
-    // Sem horário: um travessão discreto ocupa a coluna, mantendo o
-    // alinhamento do resto da linha.
+    // Travessão CENTRADO na coluna do horário, não alinhado à direita como
+    // ele: "—" é bem mais estreito que "09:39", e alinhar pela direita
+    // jogava o traço pro fim da coluna, desencontrado da coluna de
+    // horários logo acima.
+    ctx.textAlign = "center";
     ctx.fillStyle = "#4b5563";
     ctx.font = "700 25px 'JetBrains Mono', monospace";
-    ctx.fillText("—", xHora + larguraHora, cyCentro);
+    ctx.fillText("—", xHora + larguraHora / 2, cyCentro);
   }
   ctx.textAlign = "left";
 
@@ -792,16 +848,16 @@ function desenharLinhaDoJogo(
 
   // confronto
   ctx.fillStyle = "#eceef1";
-  ctx.font = "700 30px Inter, sans-serif";
-  ctx.fillText(encaixarConfronto(ctx, bet.jogo, larguraTexto), xTexto, cyCentro - 15);
+  ctx.font = "700 29px Inter, sans-serif";
+  ctx.fillText(encaixarConfronto(ctx, bet.jogo, larguraTexto), xTexto, cyCentro - 13);
 
   // mercado
   ctx.fillStyle = "#8b919c";
-  ctx.font = "500 22px Inter, sans-serif";
+  ctx.font = "500 21px Inter, sans-serif";
   ctx.fillText(
     truncar(ctx, bet.mercado || "Mercado não identificado", larguraTexto),
     xTexto,
-    cyCentro + 17,
+    cyCentro + 16,
   );
 
   // status: ícone + texto, sem nenhum fundo

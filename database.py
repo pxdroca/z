@@ -428,6 +428,38 @@ def list_apostas_ativas() -> list[Bet]:
     return [_row_to_bet(r) for r in rows]
 
 
+def list_confrontos_conhecidos(desde: Optional[datetime] = None) -> list[Bet]:
+    """
+    Apostas recentes cujo confronto JÁ foi confirmado (têm os dois nomes e
+    data_hora), pra servir de fonte ao matcher.
+
+    Existe porque o tipster manda mais de uma aposta no mesmo jogo e o
+    matcher tratava cada uma como se fosse a primeira. Caso real
+    (04/09/2026): a #101 confirmou "Taylor Townsend x Diana Shnaider,
+    US Open 3ª rodada, 14:00"; meia hora depois a #118 ("Diana vencer um
+    set") foi procurar do zero, não achou e nasceu "não encontrada" — com
+    a resposta já gravada na linha de cima.
+
+    Inclui encerradas de propósito: entre uma tip e outra o jogo pode ter
+    acabado, e o confronto continua sendo o mesmo.
+    """
+    query = """SELECT * FROM bets
+                WHERE jogador1 IS NOT NULL AND jogador1 <> '?'
+                  AND jogador2 IS NOT NULL AND jogador2 <> '?'
+                  AND data_hora IS NOT NULL
+                  AND status <> %s"""
+    params: list = [BetStatus.ERRO_EXTRACAO.value]
+    if desde is not None:
+        query += " AND criado_em >= %s"
+        params.append(desde)
+    query += " ORDER BY criado_em DESC"
+
+    with get_connection() as conn:
+        cur = conn.execute(query, params)
+        rows = cur.fetchall()
+    return [_row_to_bet(r) for r in rows]
+
+
 def list_trackable_bets() -> list[Bet]:
     """
     Apostas que score_updater.py deve acompanhar: ainda não encerradas

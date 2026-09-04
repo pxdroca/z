@@ -421,7 +421,61 @@
 
 /* Item do grid: repassa a altura da linha pro card, pra todos os cards
    da mesma linha terminarem juntos (ver comentário no BetCard.tsx). */
+/* Brilho ESCAPANDO pela quina superior-esquerda.
+
+   Vive no .wrapper e não no .card porque o card tem `overflow: hidden`
+   (necessário pros pseudo-elementos de luz não vazarem do raio) — e era
+   isso que cortava o brilho rente à borda, o mesmo defeito que a
+   imagem-resumo tinha. Aqui a luz nasce fora do card e some em
+   gradiente, então a quina fica com a luz inteira.
+
+   A cor vem de --status-glow, definida por [data-resultado] no card, e
+   é herdada via .wrapper:has() abaixo — mesma paleta da imagem. */
+.wrapper::before {
+  content: "";
+  position: absolute;
+  top: -0.75rem;
+  left: -0.75rem;
+  width: 9rem;
+  height: 9rem;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--glow-externo, transparent), transparent 62%);
+  filter: blur(14px);
+  opacity: 0.85;
+  transition: opacity 0.18s ease;
+}
+
+/* Cada resultado acende a quina na sua cor. Os mesmos tons da
+   imagem-resumo (lib/imagemResumo.ts), pra tela e imagem falarem igual. */
+.wrapper:has(.card[data-resultado="green"]),
+.wrapper:has(.card[data-resultado="cashout"]) {
+  --glow-externo: rgba(52, 211, 153, 0.4);
+}
+
+.wrapper:has(.card[data-resultado="red"]) {
+  --glow-externo: rgba(248, 113, 113, 0.38);
+}
+
+.wrapper:has(.card[data-resultado="void"]) {
+  --glow-externo: rgba(156, 163, 175, 0.3);
+}
+
+/* Ao vivo em âmbar (o card usa data-status pra isso, não data-resultado:
+   "ao vivo" é estado da PARTIDA, e o resultado dela ainda é pendente). */
+.wrapper:has(.card[data-status="ao_vivo"]) {
+  --glow-externo: rgba(251, 191, 36, 0.4);
+}
+
+.wrapper:hover::before {
+  opacity: 1;
+}
+
 .wrapper {
+  /* relative: é o bloco de contenção do ::before que acende a quina
+     (ver acima) — sem isso o brilho se ancoraria na viewport. */
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;

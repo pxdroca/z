@@ -130,6 +130,10 @@ export function BetCard({
       <div
         className={editando ? `${styles.card} ${styles.cardComEditor}` : styles.card}
         data-resultado={bet.resultado}
+        /* data-status separado: "ao vivo" é estado da PARTIDA e o
+           resultado dela ainda é "pendente", então sem isto a quina de
+           um jogo ao vivo acenderia em cinza em vez de âmbar. */
+        data-status={bet.status}
       >
         {/* Lensing de borda do vidro (ver BetCard.module.css) — puramente
             decorativo, precisa de elemento próprio por causa do mask. */}

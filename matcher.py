@@ -37,6 +37,7 @@ from zoneinfo import ZoneInfo
 
 from bookmakers import REGISTRY
 from config import settings
+from database import list_confrontos_conhecidos
 from models import Esporte, MatchInfo
 from nameutils import names_match, pair_matches, search_variants
 from scores365_client import find_canonical_match_365
@@ -294,6 +295,69 @@ def _data_hora_do_card(horario_texto: str, referencia: Optional[datetime]) -> Op
     except ValueError:
         return None
     return inicio.astimezone(timezone.utc)
+
+
+# Por quanto tempo uma aposta já confirmada serve de fonte pro confronto
+# de uma tip nova.
+#
+# 12h cobre com folga o intervalo entre duas tips do mesmo jogo (a #101 e
+# a #118 saíram com 5h30 de diferença) sem alcançar o jogo do mesmo
+# jogador em OUTRO dia do torneio — que seria o confronto errado.
+_JANELA_CONFRONTO_ANTERIOR = timedelta(hours=12)
+
+
+def _confronto_de_aposta_anterior(
+    jogador1: str, esporte: str, referencia: Optional[datetime]
+) -> Optional[CanonicalMatch]:
+    """Procura o confronto numa aposta recente já confirmada do mesmo jogador.
+
+    O tipster manda várias apostas no mesmo jogo ("Diana vencer a partida"
+    de manhã, "Diana vencer um set" à tarde), e o matcher tratava cada uma
+    como se fosse a primeira — a segunda ia procurar do zero e às vezes
+    não achava, nascendo "não encontrada" com a resposta já gravada na
+    linha de cima (caso real: #101 confirmou Townsend x Shnaider, a #118
+    meia hora depois não achou).
+
+    Só aceita quando o nome bate com UM dos dois lados e o jogo está
+    dentro da janela — ver _JANELA_CONFRONTO_ANTERIOR.
+    """
+    ancora = referencia or datetime.now(timezone.utc)
+    threshold = settings.SUPERBET_FUZZY_THRESHOLD
+
+    try:
+        anteriores = list_confrontos_conhecidos(desde=ancora - _JANELA_CONFRONTO_ANTERIOR)
+    except Exception:
+        logger.exception("Falha ao consultar confrontos já conhecidos — seguindo sem essa fonte.")
+        return None
+
+    for bet in anteriores:
+        if (bet.esporte or Esporte.TENIS.value) != esporte:
+            continue
+        if bet.data_hora is None:
+            continue
+        # O jogo tem que estar na mesma janela: o mesmo jogador joga de
+        # novo em outro dia do torneio, e aí o confronto é outro.
+        if abs((bet.data_hora - ancora).total_seconds()) > _JANELA_CONFRONTO_ANTERIOR.total_seconds():
+            continue
+        if not (
+            names_match(jogador1, bet.jogador1, threshold)
+            or names_match(jogador1, bet.jogador2, threshold)
+        ):
+            continue
+
+        logger.info(
+            "Confronto reaproveitado da aposta #%s: %s x %s | %s | %s",
+            bet.id, bet.jogador1, bet.jogador2, bet.torneio, bet.data_hora,
+        )
+        return CanonicalMatch(
+            jogador1_oficial=bet.jogador1,
+            jogador2_oficial=bet.jogador2,
+            torneio_oficial=bet.torneio,
+            data_hora=bet.data_hora,
+            sofascore_event_id=bet.sofascore_event_id,
+        )
+
+    return None
 
 
 def _completar_event_id(
@@ -562,10 +626,17 @@ def find_match(
         # exigir_hoje: sem o adversário, um card de amanhã quase sempre
         # significa que o jogo de hoje desse jogador já acabou — aceitar
         # gravaria a aposta no confronto errado.
-        canonico, link_superbet = _confronto_pela_superbet(
-            jogador1, None, esporte, dias_de_busca, referencia, odd_tip,
-            exigir_hoje=True, prefere_duplas=prefere_duplas,
-        )
+        # ANTES de tudo: o confronto pode já estar gravado numa aposta
+        # anterior do mesmo jogo. É a fonte mais confiável que existe (foi
+        # confirmada por uma fonte esportiva na primeira vez) e a mais
+        # barata (uma consulta ao banco, sem rede).
+        canonico = _confronto_de_aposta_anterior(jogador1, esporte, referencia)
+
+        if canonico is None:
+            canonico, link_superbet = _confronto_pela_superbet(
+                jogador1, None, esporte, dias_de_busca, referencia, odd_tip,
+                exigir_hoje=True, prefere_duplas=prefere_duplas,
+            )
         if canonico is None:
             canonico = find_canonical_match_by_name(
                 jogador1, esporte=esporte, referencia=referencia, aceitar_duplas=prefere_duplas
