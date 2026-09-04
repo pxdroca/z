@@ -48,11 +48,32 @@ logger = logging.getLogger(__name__)
 # Fixo (não settings.TIMEZONE): é o relógio DO SITE, não o do usuário.
 _FUSO_DA_CASA = ZoneInfo("America/Sao_Paulo")
 
+# O tipster avisa quando a aposta é de duplas ("Borges e hijikata na
+# duplas", "Irmãos cerundolo na duplas", "hijikata/duplas").
+_DUPLAS_PATTERN = re.compile(r"\b(duplas?|doubles)\b", re.IGNORECASE)
+
+
+def tip_e_de_duplas(texto: Optional[str]) -> bool:
+    """A tip diz explicitamente que a aposta é de DUPLAS?
+
+    O matcher descarta confrontos de duplas por padrão, e isso está certo
+    na maioria dos casos: um tenista tem simples e duplas no mesmo dia, e
+    aceitar a dupla gravava a aposta no confronto errado (bug real com
+    "Hara friend"). Mas o tipster passou a mandar tips de duplas de
+    verdade — "Borges e hijikata NA DUPLAS odd: 1.87" (04/09/2026) — e aí
+    rejeitar a dupla é rejeitar a aposta certa.
+
+    Quando o texto da tip diz "duplas", a preferência se INVERTE: o
+    confronto de duplas passa a ser o desejado.
+    """
+    return bool(texto and _DUPLAS_PATTERN.search(texto))
+
 
 def buscar_confronto_na_superbet(
     nome: str,
     esporte: str = Esporte.TENIS.value,
     odd_tip: Optional[float] = None,
+    prefere_duplas: bool = False,
 ):
     """Procura o confronto de `nome` na busca da Superbet, tentando o nome
     inteiro e depois só o sobrenome (ver nameutils.search_variants).
@@ -121,7 +142,7 @@ def buscar_confronto_na_superbet(
         if not plausiveis:
             continue
 
-        escolhido = _escolher_confronto(plausiveis, variante, odd_tip)
+        escolhido = _escolher_confronto(plausiveis, variante, odd_tip, prefere_duplas)
         if escolhido is None:
             return None
 
@@ -150,7 +171,9 @@ def _card_eh_hoje(horario_texto: str) -> bool:
     return True
 
 
-def _escolher_confronto(plausiveis: list, variante: str, odd_tip: Optional[float]):
+def _escolher_confronto(
+    plausiveis: list, variante: str, odd_tip: Optional[float], prefere_duplas: bool = False
+):
     """Escolhe um confronto entre os candidatos da busca da Superbet.
 
     Um tenista costuma ter simples E duplas no mesmo dia, então vários
@@ -192,25 +215,33 @@ def _escolher_confronto(plausiveis: list, variante: str, odd_tip: Optional[float
                 )
                 return melhor
 
-    simples = [c for c in plausiveis if "/" not in c.jogador1 and "/" not in c.jogador2]
-    if len(simples) == 1:
-        logger.info(
-            "Superbet: %d confrontos para %r, 1 de simples — usando o de simples.",
-            len(plausiveis), variante,
-        )
-        return simples[0]
+    # A Superbet escreve duplas como "A.Sobrenome/B.Sobrenome", então a
+    # barra é o sinal. Normalmente queremos o de SIMPLES; quando a tip diz
+    # "na duplas", a preferência inverte (ver tip_e_de_duplas).
+    def _e_duplas(c) -> bool:
+        return "/" in c.jogador1 or "/" in c.jogador2
 
-    if len(simples) > 1:
+    desejados = [c for c in plausiveis if _e_duplas(c) == prefere_duplas]
+    rotulo = "duplas" if prefere_duplas else "simples"
+
+    if len(desejados) == 1:
         logger.info(
-            "Superbet: %d jogos de simples plausíveis para %r (%s) — ambíguo, não vou escolher.",
-            len(simples), variante,
-            "; ".join(f"{c.jogador1} x {c.jogador2}" for c in simples[:4]),
+            "Superbet: %d confrontos para %r, 1 de %s — usando o de %s.",
+            len(plausiveis), variante, rotulo, rotulo,
+        )
+        return desejados[0]
+
+    if len(desejados) > 1:
+        logger.info(
+            "Superbet: %d jogos de %s plausíveis para %r (%s) — ambíguo, não vou escolher.",
+            len(desejados), rotulo, variante,
+            "; ".join(f"{c.jogador1} x {c.jogador2}" for c in desejados[:4]),
         )
         return None
 
     logger.info(
-        "Superbet: só achei jogos de duplas para %r (%s) — ignorando.",
-        variante, "; ".join(f"{c.jogador1} x {c.jogador2}" for c in plausiveis[:4]),
+        "Superbet: nenhum jogo de %s para %r (%s) — ignorando.",
+        rotulo, variante, "; ".join(f"{c.jogador1} x {c.jogador2}" for c in plausiveis[:4]),
     )
     return None
 
@@ -310,6 +341,7 @@ def _confronto_pela_superbet(
     odd_tip: Optional[float],
     exigir_hoje: bool,
     ja_tentou_par: bool = False,
+    prefere_duplas: bool = False,
 ) -> tuple[Optional[CanonicalMatch], Optional[str]]:
     """Última tentativa: usa a busca da Superbet como fonte do confronto.
 
@@ -330,9 +362,9 @@ def _confronto_pela_superbet(
     exato da partida naquela casa — melhor que o link aproximado que o
     adaptador montaria depois.
     """
-    card = buscar_confronto_na_superbet(jogador1, esporte, odd_tip)
+    card = buscar_confronto_na_superbet(jogador1, esporte, odd_tip, prefere_duplas)
     if card is None and jogador2:
-        card = buscar_confronto_na_superbet(jogador2, esporte, odd_tip)
+        card = buscar_confronto_na_superbet(jogador2, esporte, odd_tip, prefere_duplas)
     if card is None:
         return None, None
 
@@ -403,6 +435,7 @@ def find_match(
     dias_de_busca: int = 3,
     referencia: Optional[datetime] = None,
     odd_tip: Optional[float] = None,
+    texto_tip: Optional[str] = None,
 ) -> MatchInfo:
     """
     Ponto de entrada principal, chamado pelo listener.py depois do
@@ -413,11 +446,16 @@ def find_match(
     `odd_tip` é a odd que o tipster mandou; quando informada, desempata
     entre o jogo de simples e o de duplas do mesmo jogador na Superbet (ver
     buscar_confronto_na_superbet).
+
+    `texto_tip` é o texto original da tip. Serve pra detectar aposta de
+    DUPLAS ("Borges e hijikata na duplas"), que por padrão é descartada —
+    ver tip_e_de_duplas.
     """
     if not jogador1:
         return MatchInfo(encontrado=False, esporte=esporte)
 
     link_superbet: Optional[str] = None
+    prefere_duplas = tip_e_de_duplas(texto_tip)
 
     if jogador2:
         # Com os dois nomes em mãos, vale tentar as fontes esportivas
@@ -431,7 +469,7 @@ def find_match(
             # a aposta existe, afinal) e resolve de quebra typo do tipster.
             canonico, link_superbet = _confronto_pela_superbet(
                 jogador1, jogador2, esporte, dias_de_busca, referencia, odd_tip,
-                exigir_hoje=False, ja_tentou_par=True,
+                exigir_hoje=False, ja_tentou_par=True, prefere_duplas=prefere_duplas,
             )
     else:
         # Só o favorito citado: aqui as fontes esportivas precisariam
@@ -447,10 +485,12 @@ def find_match(
         # gravaria a aposta no confronto errado.
         canonico, link_superbet = _confronto_pela_superbet(
             jogador1, None, esporte, dias_de_busca, referencia, odd_tip,
-            exigir_hoje=True,
+            exigir_hoje=True, prefere_duplas=prefere_duplas,
         )
         if canonico is None:
-            canonico = find_canonical_match_by_name(jogador1, esporte=esporte, referencia=referencia)
+            canonico = find_canonical_match_by_name(
+                jogador1, esporte=esporte, referencia=referencia, aceitar_duplas=prefere_duplas
+            )
 
     # Nomes/torneio/hora "oficiais": usa o que o SofaScore confirmou, ou
     # cai para o que o OCR extraiu, se o SofaScore não achar nada.

@@ -249,6 +249,9 @@ def _retentar_bet_nao_encontrada(bet: Bet) -> None:
         bet.jogador1, jogador2, bet.esporte,
         referencia=bet.criado_em,
         odd_tip=bet.odd,
+        # fonte_texto guarda a legenda/OCR original — é onde está o "na
+        # duplas" que autoriza o matcher a aceitar confronto de duplas.
+        texto_tip=bet.fonte_texto or bet.mercado,
     )
     if not match.encontrado:
         logger.debug("Aposta #%s: ainda não encontrada (%s x %s)", bet.id, bet.jogador1, bet.jogador2)

@@ -320,6 +320,7 @@ def find_canonical_match(
 
 def find_canonical_match_by_name(
     jogador: str,
+    aceitar_duplas: bool = False,
     esporte: str = Esporte.TENIS.value,
     referencia: Optional[datetime] = None,
 ) -> Optional[CanonicalMatch]:
@@ -398,7 +399,10 @@ def find_canonical_match_by_name(
             #
             # O SofaScore nomeia duplas com "/" separando os parceiros,
             # igual à Superbet (ver matcher._escolher_confronto).
-            if "/" in candidato.jogador1_oficial or "/" in candidato.jogador2_oficial:
+            # aceitar_duplas: a tip disse "na duplas", então o jogo de
+            # duplas é justamente o desejado (ver matcher.tip_e_de_duplas).
+            e_duplas = "/" in candidato.jogador1_oficial or "/" in candidato.jogador2_oficial
+            if e_duplas and not aceitar_duplas:
                 logger.info(
                     "SofaScore: descartando %s x %s para '%s' — é jogo de duplas.",
                     candidato.jogador1_oficial, candidato.jogador2_oficial, jogador,

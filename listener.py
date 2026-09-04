@@ -359,6 +359,9 @@ async def process_message(message: Message) -> None:
             extracted.jogador1, extracted.jogador2, extracted.esporte,
             referencia=message.date,
             odd_tip=extracted.odd,
+            # Texto original: detecta tip de DUPLAS ("na duplas"), que o
+            # matcher descarta por padrão — ver matcher.tip_e_de_duplas.
+            texto_tip=extracted.texto_bruto or caption,
         )
     )
 
