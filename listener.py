@@ -98,6 +98,24 @@ _SYNC_STATE_KEY = "listener_last_message_id"
 # inteiro caso TELEGRAM_SOURCE_CHAT aponte pra outro lugar.
 _JANELA_PRIMEIRO_POLL = timedelta(hours=12)
 
+# Quando TELEGRAM_SOURCE_CHAT é um PREFIXO de nome, quais grupos com esse
+# prefixo continuam sendo lidos: todos os que tiveram atividade nas últimas
+# 36h — na prática, o de hoje e o de amanhã.
+#
+# Por que mais de um: o tipster cria o grupo do dia seguinte no FIM DO DIA e
+# já manda tips nele, enquanto o grupo de hoje ainda está ativo (resultados,
+# avisos de cash-out, conversa). Nessa janela existem dois grupos vivos ao
+# mesmo tempo, e escolher "o mais recente" é cara ou coroa: se a última
+# mensagem caiu no grupo de hoje, as tips de amanhã não são lidas; se caiu
+# no de amanhã, os avisos de cash-out de hoje é que se perdem — e cada poll
+# pode decidir diferente do anterior, então dá pra alternar entre os dois
+# erros na mesma noite.
+#
+# Ler os dois resolve os dois casos e não custa quase nada: cada chat tem seu
+# próprio ponteiro em sync_state, e a idempotência é por (chat_id,
+# mensagem_id), então nada é reprocessado.
+_JANELA_GRUPOS_ATIVOS = timedelta(hours=36)
+
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -128,19 +146,22 @@ def _build_client() -> TelegramClient:
     return TelegramClient(session, settings.TELEGRAM_API_ID, settings.TELEGRAM_API_HASH)
 
 
-async def _resolve_source_chat(client: TelegramClient):
+async def _resolver_chats_de_origem(client: TelegramClient) -> list:
     """
-    Resolve o grupo de tips a partir de TELEGRAM_SOURCE_CHAT, em 3 formatos
+    Resolve os grupos de tips a partir de TELEGRAM_SOURCE_CHAT, em 3 formatos
     possíveis:
 
       1. ID numérico fixo (ex: "-1001234567890") — grupo permanente.
       2. @username fixo (ex: "meugrupo_tips") — grupo permanente.
       3. Prefixo de nome (ex: "Cansadão Apostas") — usado quando o grupo é
          recriado periodicamente com um sufixo variável no nome (ex: data:
-         "Cansadão Apostas 31/08", "Cansadão Apostas 01/09"). Nesse caso,
-         varremos os diálogos procurando pelo grupo mais recente cujo nome
-         comece com esse prefixo — sem precisar atualizar nada manualmente
-         quando um grupo novo é liberado.
+         "Cansadão Apostas 31/08", "Cansadão Apostas 01/09").
+
+    Devolve uma LISTA (plural) de propósito. Nos casos 1 e 2 ela tem um
+    item só. No caso 3 ela tem todos os grupos com aquele prefixo ativos
+    nas últimas _JANELA_GRUPOS_ATIVOS — ver o comentário lá em cima para o
+    porquê: no fim do dia o grupo de hoje e o de amanhã existem ao mesmo
+    tempo, e ficar com só um deles perde mensagens do outro.
 
     Como diferenciamos os casos: se o valor não é um ID numérico nem existe
     um chat com esse @username/nome exato, tratamos como prefixo (caso 3).
@@ -152,7 +173,7 @@ async def _resolve_source_chat(client: TelegramClient):
     # Caso 1: ID numérico.
     try:
         chat_id = int(raw)
-        return await client.get_entity(chat_id)
+        return [await client.get_entity(chat_id)]
     except ValueError:
         pass
 
@@ -160,12 +181,12 @@ async def _resolve_source_chat(client: TelegramClient):
     # username do Telegram nunca tem espaço, prefixo de nome de grupo tem).
     if " " not in raw:
         try:
-            return await client.get_entity(raw)
+            return [await client.get_entity(raw)]
         except (ValueError, TypeError):
             pass
 
-    # Caso 3: prefixo de nome — acha o diálogo mais recente cujo título
-    # comece com o prefixo configurado.
+    # Caso 3: prefixo de nome — todos os diálogos cujo título comece com o
+    # prefixo configurado.
     candidatos = []
     async for dialog in client.iter_dialogs():
         if dialog.name and dialog.name.strip().lower().startswith(raw.lower()):
@@ -178,15 +199,24 @@ async def _resolve_source_chat(client: TelegramClient):
             "'python listener.py --list-chats' para conferir os nomes exatos."
         )
 
-    # dialog.date é a data da última mensagem/atividade — o grupo do dia
-    # mais recente tende a ser o mais ativo agora.
-    mais_recente = max(candidatos, key=lambda d: d.date)
-    if len(candidatos) > 1:
-        logger.info(
-            "Múltiplos grupos com prefixo %r encontrados (%s) — usando o mais recente: %r",
-            raw, [d.name for d in candidatos], mais_recente.name,
-        )
-    return mais_recente.entity
+    # dialog.date é a data da última mensagem/atividade.
+    limite = datetime.now(timezone.utc) - _JANELA_GRUPOS_ATIVOS
+    ativos = [d for d in candidatos if d.date and d.date >= limite]
+    if not ativos:
+        # Nenhum grupo teve atividade recente (fim de semana sem jogo, ou o
+        # tipster ainda não postou hoje). Cair pro mais recente conhecido é
+        # melhor que devolver lista vazia e não ler nada.
+        ativos = [max(candidatos, key=lambda d: d.date)]
+
+    # Mais antigo primeiro: quando o grupo de hoje e o de amanhã estão
+    # ativos, as mensagens são lidas na ordem cronológica dos grupos.
+    ativos.sort(key=lambda d: d.date)
+
+    logger.info(
+        "Grupos com prefixo %r sendo lidos: %s (de %d encontrado(s) no total)",
+        raw, [d.name for d in ativos], len(candidatos),
+    )
+    return [d.entity for d in ativos]
 
 
 async def _processar_aviso_cashout(mensagem_id: int, chat_id: Optional[int], nome_citado: str, caption: str) -> None:
@@ -401,11 +431,11 @@ async def run_listener() -> None:
     client = _build_client()
 
     async with client:
-        source_chat = await _resolve_source_chat(client)
-        logger.info("Escutando o chat: %s", getattr(source_chat, "title", source_chat))
+        chats = await _resolver_chats_de_origem(client)
+        logger.info("Escutando: %s", [getattr(c, "title", c) for c in chats])
         await send_plain_message("🎾 Tennis Bet Monitor iniciado e escutando o grupo de tips.")
 
-        @client.on(events.NewMessage(chats=source_chat))
+        @client.on(events.NewMessage(chats=chats))
         async def _handler(event: events.NewMessage.Event) -> None:
             try:
                 await process_message(event.message)
@@ -428,13 +458,13 @@ async def backfill(limit: int) -> None:
     init_db()
     client = _build_client()
     async with client:
-        source_chat = await _resolve_source_chat(client)
-        logger.info("Backfill: buscando as últimas %d mensagens de %s", limit, getattr(source_chat, "title", ""))
-        async for message in client.iter_messages(source_chat, limit=limit):
-            try:
-                await process_message(message)
-            except Exception:
-                logger.exception("Erro no backfill da mensagem %s", message.id)
+        for chat in await _resolver_chats_de_origem(client):
+            logger.info("Backfill: buscando as últimas %d mensagens de %s", limit, getattr(chat, "title", ""))
+            async for message in client.iter_messages(chat, limit=limit):
+                try:
+                    await process_message(message)
+                except Exception:
+                    logger.exception("Erro no backfill da mensagem %s", message.id)
 
 
 async def poll_new_messages() -> None:
@@ -444,73 +474,86 @@ async def poll_new_messages() -> None:
     pensado pra ser chamado por um cron.
 
     "Última execução" é rastreado via sync_state no Postgres, POR CHAT (a
-    chave inclui source_chat.id) — bug real encontrado em produção: quando
-    TELEGRAM_SOURCE_CHAT é um prefixo de nome (ver _resolve_source_chat) e
-    o grupo é recriado a cada dia, cada grupo novo é um chat_id diferente
+    chave inclui o chat.id) — bug real encontrado em produção: quando
+    TELEGRAM_SOURCE_CHAT é um prefixo de nome (ver _resolver_chats_de_origem)
+    e o grupo é recriado a cada dia, cada grupo novo é um chat_id diferente
     do Telegram com sua PRÓPRIA numeração de mensagens (reinicia perto de
     1). Guardar um único last_message_id global (sem o chat_id) fazia o
     poll do dia seguinte reaplicar o min_id do grupo de ONTEM (ex: 326) no
     grupo de HOJE — como as mensagens novas do grupo novo têm ids bem
     menores que esse min_id herdado, ficavam todas escondidas pra sempre,
     silenciosamente (sem erro, só "0 mensagens novas" no log).
+
+    Lê TODOS os grupos ativos, não só um: no fim do dia o grupo de amanhã
+    já existe (com tips) enquanto o de hoje ainda recebe resultado e aviso
+    de cash-out — ver _JANELA_GRUPOS_ATIVOS.
     """
     init_db()
     client = _build_client()
     async with client:
-        source_chat = await _resolve_source_chat(client)
-        sync_key = f"{_SYNC_STATE_KEY}:{source_chat.id}"
-
-        last_id_raw = get_sync_state(sync_key)
-        min_id = int(last_id_raw) if last_id_raw else 0
-
-        mensagens = []
-        async for message in client.iter_messages(source_chat, min_id=min_id):
-            mensagens.append(message)
-
-        # min_id=0 = primeira execução NESTE chat. Não dá pra processar o
-        # histórico inteiro (backfill surpresa de um grupo antigo), mas
-        # também não dá pra pegar só a última mensagem: como o grupo é
-        # recriado todo dia (ver docstring), "primeira execução" acontece
-        # TODO DIA, e o corte em [:1] descartava tudo que o tipster já
-        # tinha postado antes do primeiro poll do grupo novo.
-        #
-        # Bug real (03/09/2026): 6 tips (msgs 98-103, 01:47-01:53) foram
-        # perdidas silenciosamente porque no primeiro poll do grupo de hoje
-        # a mensagem mais recente era um comentário solto (id 124) — as
-        # apostas ficaram "atrás" dela e nunca foram vistas. Tiveram que
-        # ser reprocessadas à mão.
-        #
-        # Janela de tempo em vez de contagem: pega o que é plausivelmente
-        # "do dia corrente" e ignora histórico antigo de verdade.
-        if min_id == 0 and mensagens:
-            limite = datetime.now(timezone.utc) - _JANELA_PRIMEIRO_POLL
-            recentes = [m for m in mensagens if m.date and m.date >= limite]
-            logger.info(
-                "Primeiro poll em %s: %d de %d mensagem(ns) dentro da janela de %s.",
-                getattr(source_chat, "title", ""), len(recentes), len(mensagens),
-                _JANELA_PRIMEIRO_POLL,
-            )
-            mensagens = recentes
-
-        # iter_messages devolve do mais novo pro mais antigo — processa na
-        # ordem cronológica real.
-        mensagens.reverse()
-
-        logger.info(
-            "Poll: %d mensagem(ns) nova(s) em %s (min_id=%s)",
-            len(mensagens), getattr(source_chat, "title", ""), min_id,
-        )
-
-        maior_id = min_id
-        for message in mensagens:
+        chats = await _resolver_chats_de_origem(client)
+        for chat in chats:
             try:
-                await process_message(message)
+                await _poll_chat(client, chat)
             except Exception:
-                logger.exception("Erro ao processar mensagem %s", message.id)
-            maior_id = max(maior_id, message.id)
+                logger.exception("Erro ao ler o chat %s", getattr(chat, "title", chat))
 
-        if maior_id != min_id:
-            set_sync_state(sync_key, str(maior_id))
+
+async def _poll_chat(client: TelegramClient, chat) -> None:
+    """Lê as mensagens novas de UM chat e atualiza o ponteiro dele."""
+    sync_key = f"{_SYNC_STATE_KEY}:{chat.id}"
+
+    last_id_raw = get_sync_state(sync_key)
+    min_id = int(last_id_raw) if last_id_raw else 0
+
+    mensagens = []
+    async for message in client.iter_messages(chat, min_id=min_id):
+        mensagens.append(message)
+
+    # min_id=0 = primeira execução NESTE chat. Não dá pra processar o
+    # histórico inteiro (backfill surpresa de um grupo antigo), mas
+    # também não dá pra pegar só a última mensagem: como o grupo é
+    # recriado todo dia (ver docstring), "primeira execução" acontece
+    # TODO DIA, e o corte em [:1] descartava tudo que o tipster já
+    # tinha postado antes do primeiro poll do grupo novo.
+    #
+    # Bug real (03/09/2026): 6 tips (msgs 98-103, 01:47-01:53) foram
+    # perdidas silenciosamente porque no primeiro poll do grupo de hoje
+    # a mensagem mais recente era um comentário solto (id 124) — as
+    # apostas ficaram "atrás" dela e nunca foram vistas. Tiveram que
+    # ser reprocessadas à mão.
+    #
+    # Janela de tempo em vez de contagem: pega o que é plausivelmente
+    # "do dia corrente" e ignora histórico antigo de verdade.
+    if min_id == 0 and mensagens:
+        limite = datetime.now(timezone.utc) - _JANELA_PRIMEIRO_POLL
+        recentes = [m for m in mensagens if m.date and m.date >= limite]
+        logger.info(
+            "Primeiro poll em %s: %d de %d mensagem(ns) dentro da janela de %s.",
+            getattr(chat, "title", ""), len(recentes), len(mensagens),
+            _JANELA_PRIMEIRO_POLL,
+        )
+        mensagens = recentes
+
+    # iter_messages devolve do mais novo pro mais antigo — processa na
+    # ordem cronológica real.
+    mensagens.reverse()
+
+    logger.info(
+        "Poll: %d mensagem(ns) nova(s) em %s (min_id=%s)",
+        len(mensagens), getattr(chat, "title", ""), min_id,
+    )
+
+    maior_id = min_id
+    for message in mensagens:
+        try:
+            await process_message(message)
+        except Exception:
+            logger.exception("Erro ao processar mensagem %s", message.id)
+        maior_id = max(maior_id, message.id)
+
+    if maior_id != min_id:
+        set_sync_state(sync_key, str(maior_id))
 
 
 def main() -> None:
