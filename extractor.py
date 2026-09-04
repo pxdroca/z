@@ -154,6 +154,17 @@ exato:
   // Preencha isto SE tipo_aposta == "multipla" (senão deixe null/[]):
   // "selecoes": só o jogador FAVORECIDO de cada perna (quem a aposta diz que
   // vence/cobre aquele mercado) — 1 nome por seleção, na ordem que aparecem.
+  //
+  // Use SÓ O SOBRENOME, nunca o nome completo e nunca o confronto. A lista
+  // é o título da aposta no painel e na imagem, onde o espaço é uma linha
+  // só: "Wild, Faurel" cabe e diz quem tem que ganhar; "Thiago Seyboth
+  // Wild vs Juan Pablo Varillas (1.37), ..." é cortado no meio e, pior,
+  // não deixa claro em qual dos dois lados foi a aposta.
+  //
+  // Nem confronto, nem sub-odd, nem mercado dentro do nome: o confronto de
+  // cada perna não caberia, a sub-odd não é a odd da aposta (essa vai em
+  // "odd") e o mercado vai em "mercado".
+  //
   // Se algumas seleções estiverem ocultas atrás de um "+N seleções mais" (ou
   // similar) e você não conseguir ver o nome delas, NÃO invente: deixe
   // "selecoes" só com as que você consegue ler de verdade na imagem, e marque
@@ -181,6 +192,30 @@ def _get_gemini_client():
             "Gere uma chave grátis em https://aistudio.google.com/apikey"
         )
     return genai.Client(api_key=settings.GEMINI_API_KEY)
+
+
+# Padrões que denunciam que a seleção veio como confronto/sub-odd em vez
+# de só o nome do favorito: " vs ", " x ", "(1.37)".
+_SELECAO_SUJA = re.compile(r"\s+(?:vs?|x)\s+|\(", re.IGNORECASE)
+
+
+def _so_o_sobrenome(selecao: str) -> str:
+    """Reduz uma seleção de múltipla ao sobrenome do favorito.
+
+    A lista de seleções é o TÍTULO da aposta no painel e na imagem, onde só
+    cabe uma linha. O prompt já pede sobrenome, mas isto é a garantia
+    determinística — e também conserta seleção antiga já gravada.
+
+    Corta em " vs "/" x " (fica o favorito, que vem primeiro na perna),
+    remove sub-odd entre parênteses e devolve a última palavra do nome.
+    """
+    texto = (selecao or "").strip()
+    if not texto:
+        return ""
+    # "Wild vs Varillas (1.37)" -> "Wild"
+    texto = _SELECAO_SUJA.split(texto)[0].strip()
+    partes = [p for p in texto.split() if p]
+    return partes[-1] if partes else ""
 
 
 def extract_with_gemini(image_path: Optional[str], caption_text: str) -> ExtractedBet:
@@ -228,7 +263,8 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
         esporte = Esporte.TENIS.value
 
     if data.get("tipo_aposta") == "multipla":
-        selecoes = [s for s in (data.get("selecoes") or []) if s]
+        selecoes = [_so_o_sobrenome(s) for s in (data.get("selecoes") or []) if s]
+        selecoes = [s for s in selecoes if s]
         selecoes_ocultas = bool(data.get("selecoes_ocultas"))
         # Se há seleções que o Gemini não conseguiu ler (escondidas atrás de
         # "+N seleções mais"), não fingimos saber quem são — vira uma
