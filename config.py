@@ -89,11 +89,16 @@ class Settings:
     # separado falha de forma independente. Vazio = sem backup (a cadeia
     # segue Gemini -> EasyOCR -> texto puro, como antes).
     GROQ_API_KEY: str = field(default_factory=lambda: os.getenv("GROQ_API_KEY", ""))
-    # Llama 4 Scout: tem visão (lê o print) e está no tier grátis da Groq.
+    # Qwen 3.8 27B: dos modelos que a conta grátis lista, é o único com
+    # VISÃO confirmada ao vivo (04/09/2026) — testado com um print de tip
+    # real, descreveu a imagem corretamente. Os demais disponíveis
+    # (groq/compound, openai/gpt-oss-*) rejeitam conteúdo multimodal com
+    # "messages[0].content must be a string".
+    #
+    # Se a Groq mudar o catálogo, GET /openai/v1/models lista o que a
+    # conta enxerga — não confie em nome de modelo sem checar lá.
     GROQ_MODEL: str = field(
-        default_factory=lambda: (
-            os.getenv("GROQ_MODEL", "").strip() or "meta-llama/llama-4-scout-17b-16e-instruct"
-        )
+        default_factory=lambda: (os.getenv("GROQ_MODEL", "").strip() or "qwen/qwen3.8-27b")
     )
     # Curto de propósito: é um fallback dentro do ciclo de 5 min do
     # workflow, e o EasyOCR ainda vem depois se isto também falhar.

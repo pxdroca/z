@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from functools import lru_cache
@@ -419,7 +420,8 @@ def extract_with_groq(image_path: Optional[str], caption_text: str) -> Extracted
     pra que trocar de provedor não mude o resultado — só quem atendeu.
     """
     import base64
-    from urllib import request as urlrequest
+
+    import requests
 
     if not settings.GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY não definido — sem backup do Gemini.")
@@ -435,26 +437,24 @@ def extract_with_groq(image_path: Optional[str], caption_text: str) -> Extracted
         mime = "image/png" if image_path.lower().endswith("png") else "image/jpeg"
         partes.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
 
-    corpo = json.dumps({
-        "model": settings.GROQ_MODEL,
-        "messages": [{"role": "user", "content": partes}],
-        "response_format": {"type": "json_object"},
-        "temperature": 0,
-    }).encode()
-
-    req = urlrequest.Request(
+    # `requests` e não urllib: a API da Groq fica atrás do Cloudflare, que
+    # responde 403 ("error code: 1010") ao cliente HTTP padrão do Python
+    # — bloqueio por fingerprint, antes mesmo de olhar a chave. Testado ao
+    # vivo em 04/09/2026: mesma requisição, urllib 403 e requests 200.
+    # `requests` já é dependência transitiva do projeto.
+    resp = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
-        data=corpo,
-        headers={
-            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-            "Content-Type": "application/json",
+        headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
+        json={
+            "model": settings.GROQ_MODEL,
+            "messages": [{"role": "user", "content": partes}],
+            "response_format": {"type": "json_object"},
+            "temperature": 0,
         },
+        timeout=settings.GROQ_TIMEOUT_S,
     )
-    # urllib e não a lib da Groq: é uma chamada HTTP só, e evita mais uma
-    # dependência no requirements (o runner do GitHub Actions instala tudo
-    # a cada execução).
-    with urlrequest.urlopen(req, timeout=settings.GROQ_TIMEOUT_S) as resp:
-        resposta = json.loads(resp.read().decode())
+    resp.raise_for_status()
+    resposta = resp.json()
 
     try:
         texto = resposta["choices"][0]["message"]["content"]
@@ -1146,6 +1146,42 @@ def _extract_with_easyocr_and_text(
     return parse_free_text(texto_combinado)
 
 
+# Teto de bytes da imagem pra valer a pena chamar o Groq.
+#
+# O tier grátis limita a 7.000 tokens de ENTRADA por minuto, e a imagem
+# entra em base64: ~1 token a cada 3 bytes do arquivo. Com o prompt
+# custando ~1.600 tokens, sobram ~5.400 pra imagem — cerca de 16 KB.
+#
+# Medido nos prints reais (04/09/2026): a mediana é ~50 KB, ou seja, a
+# maioria NÃO cabe. Chamar assim mesmo dá 429 depois de ~40s de espera, e
+# pior: uma resposta truncada volta vazia sem erro nenhum (foi o que
+# aconteceu no primeiro teste — extração vazia, não exceção). Melhor
+# pular direto pro EasyOCR e não gastar o ciclo.
+_GROQ_MAX_BYTES_IMAGEM = 16 * 1024
+
+
+def _groq_cabe_no_limite(image_path: Optional[str]) -> bool:
+    """A requisição cabe nos 7k tokens/min do tier grátis da Groq?
+
+    Sem imagem (só legenda) sempre cabe. Com imagem, decide pelo tamanho
+    do arquivo — ver _GROQ_MAX_BYTES_IMAGEM.
+    """
+    if not image_path:
+        return True
+    try:
+        tamanho = os.path.getsize(image_path)
+    except OSError:
+        return False
+    if tamanho > _GROQ_MAX_BYTES_IMAGEM:
+        logger.info(
+            "Groq pulado: print de %.0f KB passa do que cabe no limite de tokens "
+            "do tier grátis (%.0f KB) — indo pro EasyOCR.",
+            tamanho / 1024, _GROQ_MAX_BYTES_IMAGEM / 1024,
+        )
+        return False
+    return True
+
+
 def _extrair_com_fallbacks(image_path: Optional[str], caption_text: str) -> ExtractedBet:
     """Cadeia de fallback quando o Gemini falha: Groq -> EasyOCR -> texto puro.
 
@@ -1157,7 +1193,7 @@ def _extrair_com_fallbacks(image_path: Optional[str], caption_text: str) -> Extr
     Se o Groq não estiver configurado (GROQ_API_KEY vazio) ou também
     falhar, cai no EasyOCR local como antes — nunca levanta pro chamador.
     """
-    if settings.GROQ_API_KEY:
+    if settings.GROQ_API_KEY and _groq_cabe_no_limite(image_path):
         try:
             bet = extract_with_groq(image_path, caption_text)
             if bet.valido or bet.odd is not None:
