@@ -49,8 +49,16 @@ from typing import Optional
 
 import resultado_checker
 from config import settings
-from database import init_db, list_trackable_bets, list_unmatched_bets, update_match_info, update_score_result
-from matcher import find_match
+from database import (
+    init_db,
+    list_bets_sem_link_exato,
+    list_trackable_bets,
+    list_unmatched_bets,
+    update_links,
+    update_match_info,
+    update_score_result,
+)
+from matcher import build_enabled_adapters, find_match
 from models import Bet, BetStatus, ResultadoAposta
 from notifier import send_plain_message
 from scores365_client import find_status_by_names
@@ -277,9 +285,41 @@ def _retentar_bet_nao_encontrada(bet: Bet) -> None:
     )
 
 
+def _retentar_link_exato(bet: Bet) -> None:
+    """Tenta completar o link da partida na Superbet numa aposta cujo
+    confronto já está confirmado.
+
+    A busca da Superbet é intermitente: se ela não responde no instante em
+    que a tip chega, o adaptador cai no link aproximado (a listagem do dia)
+    e antes nada tentava de novo — a aposta ficava sem o link da partida
+    pra sempre. Aqui os nomes oficiais já estão gravados, então
+    find_exact_link tem tudo o que precisa (era o caso da #116,
+    Ajdukovic x Clarke: o link exato aparecia na primeira consulta feita
+    depois, com os mesmos nomes).
+
+    Só a Superbet: ver list_bets_sem_link_exato.
+    """
+    adapter = next((a for a in build_enabled_adapters() if a.slug == "superbet"), None)
+    if adapter is None:
+        return
+
+    url = adapter.find_exact_link(
+        bet.jogador1, bet.jogador2, bet.torneio, bet.data_hora, bet.esporte
+    )
+    if not url:
+        logger.debug("Aposta #%s: Superbet ainda sem link exato.", bet.id)
+        return
+
+    links = dict(bet.links or {})
+    links["superbet"] = {"nome": adapter.display_name, "url": url, "exato": True}
+    update_links(bet.id, links)
+    logger.info("Aposta #%s: link exato da Superbet completado — %s", bet.id, url)
+
+
 def run_once() -> int:
-    """Roda um ciclo: consulta todas as apostas rastreáveis e retenta as não
-    encontradas. Devolve quantas foram processadas no total."""
+    """Roda um ciclo: consulta todas as apostas rastreáveis, retenta as não
+    encontradas e completa os links exatos que faltaram. Devolve quantas
+    foram processadas no total."""
     apostas = list_trackable_bets()
     logger.info("Ciclo iniciado: %d aposta(s) para acompanhar.", len(apostas))
 
@@ -331,6 +371,20 @@ def run_once() -> int:
             _retentar_bet_nao_encontrada(bet)
         except Exception:
             logger.exception("Erro ao retentar aposta #%s (%s x %s)", bet.id, bet.jogador1, bet.jogador2)
+        _polite_delay()
+
+    # Confronto confirmado, mas o link da Superbet ficou aproximado — o
+    # link exato é a conveniência principal do painel (abre a partida, não
+    # a listagem do dia inteiro), e a busca da casa costuma responder num
+    # ciclo seguinte. Ver _retentar_link_exato.
+    sem_link = list_bets_sem_link_exato(desde=datetime.now(timezone.utc) - JANELA_DE_RETRY)
+    if sem_link:
+        logger.info("Completando o link exato de %d aposta(s).", len(sem_link))
+    for bet in sem_link:
+        try:
+            _retentar_link_exato(bet)
+        except Exception:
+            logger.exception("Erro ao buscar link exato da aposta #%s", bet.id)
         _polite_delay()
 
     return len(apostas) + len(nao_encontradas)

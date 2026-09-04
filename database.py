@@ -316,6 +316,18 @@ def update_match_info(
             )
 
 
+def update_links(bet_id: int, links: dict) -> None:
+    """Regrava só os links das casas de apostas, sem tocar em mais nada.
+
+    Usado por score_updater.py::_retentar_link_exato — o confronto já está
+    confirmado, o que faltou foi o link da partida específica."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE bets SET links_json = %s WHERE id = %s",
+            (json.dumps(links, ensure_ascii=False), bet_id),
+        )
+
+
 def update_status(bet_id: int, status: str) -> None:
     """Usado pelo app.py quando o usuário marca uma aposta como encerrada/ganha/perdida etc."""
     with get_connection() as conn:
@@ -466,6 +478,52 @@ def list_unmatched_bets(desde: Optional[datetime] = None) -> list[Bet]:
         cur = conn.execute(query, params)
         rows = cur.fetchall()
     return [_row_to_bet(r) for r in rows]
+
+
+def list_bets_sem_link_exato(desde: Optional[datetime] = None) -> list[Bet]:
+    """
+    Apostas com o confronto JÁ confirmado, mas cujo link da Superbet ficou
+    aproximado (leva pra listagem do dia em vez da partida).
+
+    Existe porque a busca da Superbet é intermitente: quando ela não
+    responde no instante em que a tip chega, o adaptador cai no link
+    aproximado e nada nunca tentava de novo — a aposta ficava sem o link da
+    partida pra sempre, mesmo com os nomes oficiais em mãos (caso real: a
+    aposta #116, Ajdukovic x Clarke, 04/09/2026, cujo link exato a busca
+    achava perfeitamente quando consultada depois).
+
+    Só olha o slug "superbet": Betano e bet365 caem no link aproximado com
+    frequência por bloqueio do site, e retentar as três a cada ciclo sairia
+    caro sem mudar o resultado.
+
+    `desde` corta a fila pelo mesmo motivo de list_unmatched_bets: jogo
+    velho já saiu da listagem da casa e nunca mais vai ter link exato.
+    """
+    # tipo_aposta <> 'multipla': múltipla não tem confronto único pra
+    # linkar (o link dela é genérico por definição, ver listener.py) —
+    # retentar seria gastar um navegador por ciclo pra nada.
+    query = """SELECT * FROM bets
+                WHERE status IN (%s, %s)
+                  AND COALESCE(tipo_aposta, 'simples') <> 'multipla'
+                  AND jogador2 IS NOT NULL AND jogador2 <> '?'"""
+    params: list = [BetStatus.AGENDADA.value, BetStatus.AO_VIVO.value]
+    if desde is not None:
+        query += " AND criado_em >= %s"
+        params.append(desde)
+    query += " ORDER BY criado_em DESC"
+
+    with get_connection() as conn:
+        cur = conn.execute(query, params)
+        rows = cur.fetchall()
+
+    # O filtro do "exato" é em Python, não em SQL: procurar '"exato": false'
+    # com LIKE dependeria da ordem das chaves e do espaçamento do JSON
+    # serializado, que não são garantidos.
+    def falta_exato(bet: Bet) -> bool:
+        info = (bet.links or {}).get("superbet")
+        return bool(info) and not info.get("exato")
+
+    return [b for b in (_row_to_bet(r) for r in rows) if falta_exato(b)]
 
 
 def update_score_result(

@@ -32,6 +32,18 @@ def _get_bool(name: str, default: bool) -> bool:
     return val.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _get_url(name: str, default: str) -> str:
+    """Lê uma URL do ambiente já sem espaço em branco nas pontas.
+
+    Um `\\r` sobrando (arquivo .env salvo com fim de linha do Windows, ou
+    valor colado com quebra) entra no valor e vai colado na URL até o
+    painel — caso real: o link da Betano gravado como
+    "https://betano.bet.br/sport/tenis/\\r\\n" nas apostas de 04/09/2026.
+    """
+    val = os.getenv(name)
+    return default if val is None else (val.strip() or default)
+
+
 def _get_int(name: str, default: int | None) -> int | None:
     val = os.getenv(name)
     if val is None or val == "":
@@ -93,33 +105,33 @@ class Settings:
     # README "Calibrando os adaptadores". Domínio/path real é .bet.br, não
     # .com como a pesquisa inicial (feita de fora do Brasil) tinha sugerido.
     SUPERBET_BASE_URL: str = field(
-        default_factory=lambda: os.getenv("SUPERBET_BASE_URL", "https://superbet.bet.br/apostas/tenis")
+        default_factory=lambda: _get_url("SUPERBET_BASE_URL", "https://superbet.bet.br/apostas/tenis")
     )
     # Confirmado ao vivo em 03/09/2026: GET retorna 200, título "Apostar em
     # Basquete Online | Odds Basquetebol | Superbet", com cards de evento
     # reais (mesmos seletores e2e-event-* da listagem de tênis).
     SUPERBET_BASKETBALL_URL: str = field(
-        default_factory=lambda: os.getenv("SUPERBET_BASKETBALL_URL", "https://superbet.bet.br/apostas/basquete")
+        default_factory=lambda: _get_url("SUPERBET_BASKETBALL_URL", "https://superbet.bet.br/apostas/basquete")
     )
-    BETANO_BASE_URL: str = field(default_factory=lambda: os.getenv("BETANO_BASE_URL", "https://betano.bet.br"))
+    BETANO_BASE_URL: str = field(default_factory=lambda: _get_url("BETANO_BASE_URL", "https://betano.bet.br"))
     # Confirmado ao vivo em 31/08/2026 (ver bookmakers/betano.py) — é de
     # fato a seção de tênis (título "Apostas Tênis"), sem bloqueio.
-    BETANO_TENNIS_PATH: str = field(default_factory=lambda: os.getenv("BETANO_TENNIS_PATH", "/sport/tenis/"))
+    BETANO_TENNIS_PATH: str = field(default_factory=lambda: _get_url("BETANO_TENNIS_PATH", "/sport/tenis/"))
     # TODO calibrar ao vivo: nunca confirmado contra o site real (mesmo aviso
     # do path de tênis acima, mas sem nenhuma validação ainda).
     BETANO_BASKETBALL_PATH: str = field(
-        default_factory=lambda: os.getenv("BETANO_BASKETBALL_PATH", "/sport/basquetebol/")
+        default_factory=lambda: _get_url("BETANO_BASKETBALL_PATH", "/sport/basquetebol/")
     )
-    BET365_BASE_URL: str = field(default_factory=lambda: os.getenv("BET365_BASE_URL", "https://www.bet365.bet.br"))
+    BET365_BASE_URL: str = field(default_factory=lambda: _get_url("BET365_BASE_URL", "https://www.bet365.bet.br"))
     # Confirmado ao vivo, mas é uma rota com hash interno (#/AS/B13/K^5/) —
     # sabidamente instável entre sessões/contas (ver aviso em bookmakers/bet365.py).
     BET365_TENNIS_PATH: str = field(
-        default_factory=lambda: os.getenv("BET365_TENNIS_PATH", "/?lng=33#/AS/B13/K%5E5/")
+        default_factory=lambda: _get_url("BET365_TENNIS_PATH", "/?lng=33#/AS/B13/K%5E5/")
     )
     # TODO calibrar ao vivo: hash interno de basquete não confirmado (mesmo
     # aviso de instabilidade do path de tênis acima, e sem validação nenhuma).
     BET365_BASKETBALL_PATH: str = field(
-        default_factory=lambda: os.getenv("BET365_BASKETBALL_PATH", "/?lng=33#/AS/B18/")
+        default_factory=lambda: _get_url("BET365_BASKETBALL_PATH", "/?lng=33#/AS/B18/")
     )
 
     # --- Diversos ---

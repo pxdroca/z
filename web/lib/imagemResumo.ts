@@ -157,6 +157,58 @@ function truncar(ctx: CanvasRenderingContext2D, texto: string, larguraMax: numbe
   return `${t}…`;
 }
 
+/**
+ * Reduz "Inaki Montes De La Torre" a "Montes De La Torre".
+ *
+ * Só o primeiro nome sai; partículas (de, la, dos…) ficam, porque elas
+ * fazem parte do sobrenome composto e "Torre" sozinho não identifica
+ * ninguém. Nomes de time de basquete ("Zhejiang Guangsha Lions") também
+ * passam por aqui, e perder a cidade continua deixando o time
+ * reconhecível.
+ */
+const _PARTICULAS = new Set(["de", "da", "do", "das", "dos", "la", "le", "van", "von", "del", "di"]);
+
+function soSobrenome(nome: string): string {
+  // "/" = duplas ("Borges N./Hijikata R."), já vem abreviado da fonte;
+  // "(" = seleção ("Coreia do Sul (F)"), que não tem sobrenome. Cortar
+  // qualquer um dos dois só destruiria a informação.
+  if (nome.includes("/") || nome.includes("(")) return nome;
+
+  const partes = nome.trim().split(/\s+/);
+  if (partes.length <= 2) return nome;
+  // Anda da esquerda pra direita descartando o(s) primeiro(s) nome(s) até
+  // sobrarem duas palavras ou a próxima ser uma partícula (aí o resto é o
+  // sobrenome composto inteiro).
+  let i = 1;
+  while (partes.length - i > 2 && !_PARTICULAS.has(partes[i].toLowerCase())) i++;
+  return partes.slice(i).join(" ");
+}
+
+/**
+ * Encaixa "A vs B" na largura disponível sem cortar com "…".
+ *
+ * Um nome cortado ("Inaki Montes vs Jack Pinnin…") não diz qual era a
+ * aposta, então antes de truncar a linha tenta versões mais curtas:
+ * nome completo → só sobrenomes. Truncar continua sendo o último
+ * recurso, pra nunca estourar a largura.
+ */
+function encaixarConfronto(
+  ctx: CanvasRenderingContext2D,
+  jogo: string,
+  larguraMax: number,
+): string {
+  if (ctx.measureText(jogo).width <= larguraMax) return jogo;
+
+  const lados = jogo.split(" vs ");
+  if (lados.length === 2) {
+    const curto = lados.map(soSobrenome).join(" vs ");
+    if (ctx.measureText(curto).width <= larguraMax) return curto;
+    return truncar(ctx, curto, larguraMax);
+  }
+
+  return truncar(ctx, jogo, larguraMax);
+}
+
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -363,7 +415,7 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
     // confronto (jogo)
     ctx.fillStyle = "#eceef1";
     ctx.font = "700 32px Inter, sans-serif";
-    ctx.fillText(truncar(ctx, bet.jogo, larguraTexto), xTexto, cyCentro + 8 - deslocamento);
+    ctx.fillText(encaixarConfronto(ctx, bet.jogo, larguraTexto), xTexto, cyCentro + 8 - deslocamento);
 
     // mercado
     ctx.fillStyle = "#a1a7b3";
