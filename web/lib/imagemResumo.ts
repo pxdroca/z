@@ -137,8 +137,11 @@ const FOOTER_ALTURA = 90;
  * sobrava ao lado de "Jogos do dia". Cada célula é um cartão de vidro
  * escuro — mesmo vocabulário dos cards de métrica do painel.
  *
- * As unidades trazem o ROI como linha secundária, no lugar de uma 5ª
- * célula: são a mesma informação (retorno) em unidades e em %.
+ * Cada célula mostra UM número e nada mais. Sem linhas secundárias: o ROI
+ * era a mesma informação das unidades noutra unidade, e "3/13" repetia o
+ * green e o red das células ao lado. A imagem é pra ser lida de relance
+ * no Telegram — quatro números grandes comunicam melhor que quatro
+ * números com legendas embaixo.
  *
  * Os números vêm de calcularEstatisticas, o MESMO cálculo dos cards do
  * painel, pra imagem e tela nunca divergirem.
@@ -146,21 +149,17 @@ const FOOTER_ALTURA = 90;
 function desenharEstatisticas(ctx: CanvasRenderingContext2D, jogos: Bet[], y: number): void {
   const stats = calcularEstatisticas(jogos);
 
-  const celulas: { label: string; valor: string; sub: string | null; cor: string }[] = [
-    { label: "GREEN", valor: String(stats.green), sub: null, cor: "#34d399" },
-    { label: "RED", valor: String(stats.red), sub: null, cor: "#f87171" },
+  const celulas: { label: string; valor: string; cor: string }[] = [
+    { label: "GREEN", valor: String(stats.green), cor: "#34d399" },
+    { label: "RED", valor: String(stats.red), cor: "#f87171" },
     {
       label: "UNIDADES",
       valor: `${stats.unidadesLiquidas >= 0 ? "+" : ""}${stats.unidadesLiquidas.toFixed(2)}u`,
-      sub: stats.roi !== null ? `ROI ${stats.roi.toFixed(1)}%` : null,
       cor: stats.unidadesLiquidas >= 0 ? "#34d399" : "#f87171",
     },
     {
-      // Sem linha secundária: green e red já estão nas outras células,
-      // então "3/13" seria a mesma informação uma terceira vez.
       label: "ACERTO",
       valor: stats.taxaAcerto !== null ? `${stats.taxaAcerto.toFixed(0)}%` : "—",
-      sub: null,
       cor: "#a78bfa",
     },
   ];
@@ -185,20 +184,15 @@ function desenharEstatisticas(ctx: CanvasRenderingContext2D, jogos: Bet[], y: nu
 
     ctx.textAlign = "center";
 
-    // Offsets a partir de cy (o topo DESTA célula), não de y.
+    // Offsets a partir de cy (o topo DESTA célula), não de y. Sem a linha
+    // secundária, o número passa a ficar centralizado na altura da caixa.
     ctx.fillStyle = "#6b7280";
     ctx.font = "700 16px Inter, sans-serif";
-    ctx.fillText(col.label, cx, cy + 26);
+    ctx.fillText(col.label, cx, cy + 28);
 
     ctx.fillStyle = col.cor;
     ctx.font = "800 34px Inter, sans-serif";
-    ctx.fillText(col.valor, cx, cy + 62);
-
-    if (col.sub) {
-      ctx.fillStyle = "#6b7280";
-      ctx.font = "500 15px Inter, sans-serif";
-      ctx.fillText(col.sub, cx, cy + 77);
-    }
+    ctx.fillText(col.valor, cx, cy + 66);
   });
 
   ctx.textAlign = "left";
