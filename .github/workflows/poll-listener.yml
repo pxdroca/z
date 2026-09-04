@@ -56,6 +56,10 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OCR_ENGINE: gemini
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Backup do Gemini quando ele devolve 503 ("high demand") — ver
+          # extractor._extrair_com_fallbacks. Sem o secret, a cadeia segue
+          # como antes (Gemini -> EasyOCR -> texto puro).
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           BOOKMAKERS: ${{ vars.BOOKMAKERS }}
           SUPERBET_BASE_URL: ${{ vars.SUPERBET_BASE_URL }}
           BETANO_BASE_URL: ${{ vars.BETANO_BASE_URL }}

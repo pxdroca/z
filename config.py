@@ -83,6 +83,22 @@ class Settings:
     # falha — ver extract_bet_info em extractor.py).
     GEMINI_MODEL: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-flash-latest"))
 
+    # --- Groq: 2º LLM, backup do Gemini (ver extractor.extract_with_groq) ---
+    # O Gemini cai com 503 ("high demand") em rajadas, e isso é do MODELO,
+    # não da conta — uma segunda chave Google não cobriria. Provedor
+    # separado falha de forma independente. Vazio = sem backup (a cadeia
+    # segue Gemini -> EasyOCR -> texto puro, como antes).
+    GROQ_API_KEY: str = field(default_factory=lambda: os.getenv("GROQ_API_KEY", ""))
+    # Llama 4 Scout: tem visão (lê o print) e está no tier grátis da Groq.
+    GROQ_MODEL: str = field(
+        default_factory=lambda: (
+            os.getenv("GROQ_MODEL", "").strip() or "meta-llama/llama-4-scout-17b-16e-instruct"
+        )
+    )
+    # Curto de propósito: é um fallback dentro do ciclo de 5 min do
+    # workflow, e o EasyOCR ainda vem depois se isto também falhar.
+    GROQ_TIMEOUT_S: int = field(default_factory=lambda: _get_int("GROQ_TIMEOUT_S", 45) or 45)
+
     # --- Banco de dados / mídia ---
     # Connection string do Postgres (Supabase) — usada tanto local quanto
     # em produção (GitHub Actions). Obrigatória: database.py não tem mais

@@ -55,9 +55,24 @@ _PADRAO_SET_ESPECIFICO = re.compile(r"^(.+?)\s+vencer o (\d)º set$", re.IGNOREC
 _PADRAO_SET_GENERICO = re.compile(r"^(.+?)\s+vencer um set$", re.IGNORECASE)
 _PADRAO_SEM_PERDER_SET = re.compile(r"^(.+?)\s+vencer sem perder set(?:s)?$", re.IGNORECASE)
 
-# Basquete: "Lakers -5.5" / "Handicap Celtics +3.5" / "Handicap: Lakers -5.5"
+# Basquete, nome ANTES da linha: "Lakers -5.5" / "Handicap Celtics +3.5"
+# / "Handicap: Lakers -5.5"
 _PADRAO_HANDICAP = re.compile(
     r"^(?:handicap\s*(?:de pontos)?\s*[:\-]?\s*)?(.+?)\s+([+-]\s?\d+(?:[.,]\d+)?)$", re.IGNORECASE,
+)
+
+# Basquete, linha ANTES do nome: "Handicap -20.5 França".
+#
+# A Superbet escreve nessa ordem, e o padrão acima (que espera o nome
+# primeiro) não casava — a aposta #121 (04/09/2026) ficou encerrada com
+# resultado pendente mesmo com o placar por quarto disponível no
+# SofaScore.
+#
+# O sinal é opcional porque o OCR às vezes o perde; sem ele assume-se
+# negativo (favorito dando pontos), que é como o mercado é escrito na
+# prática — "Handicap 20.5 França" quer dizer "França -20.5".
+_PADRAO_HANDICAP_INVERTIDO = re.compile(
+    r"^handicap\s*(?:de pontos)?\s*:?\s*([+-]?\s?\d+(?:[.,]\d+)?)\s+(.+)$", re.IGNORECASE,
 )
 # Basquete: "Mais de 215.5 pontos" / "Menos de 210.5" / "Over 215.5" / "Under 210.5 pontos"
 _PADRAO_TOTAL_PONTOS = re.compile(
@@ -65,14 +80,70 @@ _PADRAO_TOTAL_PONTOS = re.compile(
 )
 
 
+# Palavras que o tipster cola no nome e não fazem parte dele: "hijikata
+# NA DUPLAS vencer a partida", "IRMÃOS Cerúndolo". Tirar isso antes de
+# comparar é o que faz o nome citado casar com o do lado da partida.
+_RUIDO_NO_NOME = re.compile(
+    r"\b(?:na|nas|no|nos|de|da|do)?\s*(?:duplas?|doubles|irm[ãa]os?|irm[ãa]s?)\b",
+    re.IGNORECASE,
+)
+
+
+def _lados_do_nome(nome: Optional[str]) -> list[str]:
+    """Quebra "Borges N./Hijikata R." nos dois parceiros.
+
+    A dupla é gravada com "/" (formato das fontes), e comparar a string
+    inteira com um nome só nunca bate: o tipster cita UM dos dois
+    ("hijikata na duplas vencer a partida"). Devolve também o nome
+    completo, pra continuar casando quando ele cita a dupla inteira.
+    """
+    if not nome:
+        return []
+    partes = [p.strip() for p in nome.split("/") if p.strip()]
+    return [nome, *partes] if len(partes) > 1 else [nome]
+
+
 def _nome_bate(citado: str, jogador1: Optional[str], jogador2: Optional[str]) -> Optional[str]:
     """Devolve "jogador1"/"jogador2" conforme qual nome bate com o citado no
-    mercado, ou None se nenhum bater (nome não reconhecido)."""
-    if jogador1 and names_match(citado, jogador1, threshold=_THRESHOLD_NOME):
-        return "jogador1"
-    if jogador2 and names_match(citado, jogador2, threshold=_THRESHOLD_NOME):
-        return "jogador2"
+    mercado, ou None se nenhum bater (nome não reconhecido).
+
+    Em duplas compara com cada parceiro separadamente: o tipster cita só um
+    deles. Bug real (04/09/2026): as apostas #103 ("hijikata na duplas
+    vencer a partida" x "Borges N./Hijikata R.") e #104 ("Irmãos Cerúndolo"
+    x "Cerundolo F./Cerundolo J.") ficaram encerradas com resultado
+    pendente — o placar e o vencedor estavam no card, mas o nome citado
+    nunca casava com a string inteira da dupla.
+    """
+    limpo = _RUIDO_NO_NOME.sub(" ", citado).strip()
+    candidatos = [c for c in (citado, limpo) if c]
+
+    for lado, nome in (("jogador1", jogador1), ("jogador2", jogador2)):
+        for parte in _lados_do_nome(nome):
+            if any(names_match(c, parte, threshold=_THRESHOLD_NOME) for c in candidatos):
+                return lado
     return None
+
+
+def _linha_do_handicap(linha_texto: str) -> Optional[float]:
+    """Converte a linha do handicap em número, resolvendo o "-" solto.
+
+    "Handicap - 20.5 França" é ambíguo: o "-" pode ser o sinal do handicap
+    ou só um separador entre a palavra "handicap" e o número (é por isso
+    que o extractor agora escreve "-20.5", colado — ver
+    extractor._normalizar_handicap). Aqui, na dúvida, assume-se NEGATIVO:
+    o mercado escrito assim é sempre o favorito dando pontos, e é como a
+    Superbet o apresenta.
+    """
+    texto = linha_texto.replace(" ", "").replace(",", ".")
+    try:
+        valor = float(texto)
+    except ValueError:
+        return None
+    # Sem sinal explícito no número, o handicap é do favorito dando
+    # pontos: negativo.
+    if not texto.startswith(("+", "-")):
+        valor = -valor
+    return valor
 
 
 def _parse_placar_final(placar_final: Optional[str]) -> list[tuple[int, int]]:
@@ -204,14 +275,24 @@ def _checar_resultado_basquete(mercado: str, jogador1: Optional[str], jogador2: 
     if not evt.sets:
         return None
 
+    # Handicap nas duas ordens: "Lakers -5.5" e "Handicap -20.5 França".
+    nome_citado: Optional[str] = None
+    linha_texto: Optional[str] = None
+
     m = _PADRAO_HANDICAP.match(mercado)
     if m:
-        lado = _nome_bate(m.group(1).strip(), jogador1, jogador2)
+        nome_citado, linha_texto = m.group(1).strip(), m.group(2)
+    else:
+        m = _PADRAO_HANDICAP_INVERTIDO.match(mercado)
+        if m:
+            linha_texto, nome_citado = m.group(1), m.group(2).strip()
+
+    if nome_citado and linha_texto:
+        lado = _nome_bate(nome_citado, jogador1, jogador2)
         if lado is None:
             return None
-        try:
-            linha = float(m.group(2).replace(" ", "").replace(",", "."))
-        except ValueError:
+        linha = _linha_do_handicap(linha_texto)
+        if linha is None:
             return None
         pontos_j1 = sum(h for h, _ in evt.sets)
         pontos_j2 = sum(a for _, a in evt.sets)

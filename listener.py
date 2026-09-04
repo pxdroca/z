@@ -216,7 +216,48 @@ async def _resolver_chats_de_origem(client: TelegramClient) -> list:
         "Grupos com prefixo %r sendo lidos: %s (de %d encontrado(s) no total)",
         raw, [d.name for d in ativos], len(candidatos),
     )
+
+    await _sair_de_grupos_velhos(client, candidatos, ativos)
     return [d.entity for d in ativos]
+
+
+# Depois de quanto tempo sem atividade sair do grupo do dia.
+#
+# Bem maior que _JANELA_GRUPOS_ATIVOS (36h) de propósito: o grupo precisa
+# primeiro sair da janela de leitura e só depois ser abandonado, senão uma
+# corrida entre as duas regras poderia nos tirar de um grupo que ainda
+# tinha aviso de cash-out por vir. A margem de 12h cobre isso com folga.
+_JANELA_SAIR_DO_GRUPO = timedelta(hours=48)
+
+
+async def _sair_de_grupos_velhos(client: TelegramClient, candidatos: list, ativos: list) -> None:
+    """Sai dos grupos do prefixo que já passaram de _JANELA_SAIR_DO_GRUPO.
+
+    O tipster cria um grupo por dia e nunca apaga os antigos, então a lista
+    de diálogos só cresce — e cada poll varre todos eles. Sair dos que já
+    não têm nada a dizer mantém a varredura curta.
+
+    Conservador de propósito, porque sair é irreversível sem novo convite:
+      - nunca sai de um grupo que está sendo lido agora (`ativos`);
+      - exige que a última atividade seja mais velha que 48h;
+      - falha de saída é logada e ignorada (não derruba o poll).
+    """
+    ids_ativos = {d.id for d in ativos}
+    limite = datetime.now(timezone.utc) - _JANELA_SAIR_DO_GRUPO
+
+    for dialog in candidatos:
+        if dialog.id in ids_ativos:
+            continue
+        if not dialog.date or dialog.date >= limite:
+            continue
+        try:
+            await client.delete_dialog(dialog.entity)
+            logger.info(
+                "Saí do grupo %r (última atividade em %s, mais de %s atrás).",
+                dialog.name, dialog.date.isoformat(), _JANELA_SAIR_DO_GRUPO,
+            )
+        except Exception:
+            logger.exception("Não consegui sair do grupo %r — seguindo.", dialog.name)
 
 
 async def _processar_aviso_cashout(mensagem_id: int, chat_id: Optional[int], nome_citado: str, caption: str) -> None:

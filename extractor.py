@@ -300,13 +300,27 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
         logger.warning("Gemini não devolveu JSON válido: %r", getattr(response, "text", None))
         return ExtractedBet(texto_bruto=caption_text, confianca=0.0)
 
+    return _bet_do_json_do_llm(data, caption_text, image_path)
+
+
+def _bet_do_json_do_llm(
+    data: dict, caption_text: str, image_path: Optional[str]
+) -> ExtractedBet:
+    """Converte o JSON devolvido por um LLM (Gemini ou Groq) em ExtractedBet.
+
+    Compartilhado pelos dois provedores: ambos respondem no mesmo contrato
+    (_GEMINI_PROMPT), então a validação, os cintos de segurança e a
+    normalização precisam ser idênticos — senão o resultado passaria a
+    depender de qual provedor atendeu, que é exatamente o tipo de
+    inconsistência difícil de rastrear depois.
+    """
     odd = data.get("odd")
     try:
         odd = float(odd) if odd is not None else None
     except (TypeError, ValueError):
         odd = None
 
-    # Fallback "tenis" se o Gemini não preencher (ou vier algo inesperado) —
+    # Fallback "tenis" se o LLM não preencher (ou vier algo inesperado) —
     # não é garantido que o modelo sempre siga o contrato à risca.
     esporte = data.get("esporte")
     if esporte not in (Esporte.TENIS.value, Esporte.BASQUETE.value):
@@ -316,7 +330,7 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
         selecoes = [_so_o_sobrenome(s) for s in (data.get("selecoes") or []) if s]
         selecoes = [s for s in selecoes if s]
         selecoes_ocultas = bool(data.get("selecoes_ocultas"))
-        # Se há seleções que o Gemini não conseguiu ler (escondidas atrás de
+        # Se há seleções que o LLM não conseguiu ler (escondidas atrás de
         # "+N seleções mais"), não fingimos saber quem são — vira uma
         # múltipla "genérica", sem lista de jogadores (ver notifier.py).
         if selecoes_ocultas:
@@ -346,6 +360,24 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
         jogador2 = None
         mercado = None
 
+    # Anúncio de venda de vaga (cita odd de verdade, então o guard acima
+    # não pega) — mesmo tratamento do parser de texto. Ver parece_anuncio.
+    #
+    # Só sem imagem: um print de bet-slip legítimo pode vir com legenda
+    # promocional ("...última chance"), e aí quem manda são os nomes lidos
+    # do print, não a propaganda da legenda.
+    if not image_path and parece_anuncio(caption_text) and (jogador1 or jogador2 or mercado):
+        logger.info(
+            "LLM: texto parece anúncio de venda de vaga — descartando %r x %r / %r",
+            jogador1, jogador2, mercado,
+        )
+        jogador1 = jogador2 = mercado = None
+
+    # Sinal do handicap colado no número, igual ao parser de texto — o
+    # LLM copia a grafia do print, e a Superbet escreve o "-" separado.
+    if mercado:
+        mercado = _normalizar_handicap(mercado)
+
     if jogador1 and jogador2:
         confianca = 0.9
     elif jogador1:  # só o favorito, sem adversário — ainda válido, ver models.ExtractedBet.valido
@@ -364,6 +396,74 @@ def extract_with_gemini(image_path: Optional[str], caption_text: str) -> Extract
         esporte=esporte,
     )
     return bet
+
+
+# ==============================================================================
+# 2b) GROQ — segundo LLM, backup do Gemini
+# ==============================================================================
+#
+# Existe porque o Gemini cai com 503 ("This model is currently experiencing
+# high demand") em rajadas, e nessas janelas a extração desabava pro parser
+# de regex, que lê muito menos — a tip nascia sem jogadores. O EasyOCR local
+# ajuda, mas lê o print como texto cru: não entende qual dos dois jogadores
+# é o da aposta, nem separa múltipla de simples.
+#
+# Groq e não outra chave do Gemini: o 503 é do modelo, não da conta, então
+# uma segunda chave Google não cobriria justamente o erro observado.
+# Provedor separado = falha independente.
+
+def extract_with_groq(image_path: Optional[str], caption_text: str) -> ExtractedBet:
+    """Mesma tarefa de extract_with_gemini, no Groq (API compatível com OpenAI).
+
+    Usa o MESMO prompt e o mesmo parser de resposta (_bet_do_json_do_llm),
+    pra que trocar de provedor não mude o resultado — só quem atendeu.
+    """
+    import base64
+    from urllib import request as urlrequest
+
+    if not settings.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY não definido — sem backup do Gemini.")
+
+    prompt = _GEMINI_PROMPT.replace("{legenda}", caption_text or "(sem legenda)")
+
+    # Formato de mensagens da API de chat (compatível com OpenAI): o texto
+    # e a imagem vão como "partes" do mesmo turno do usuário.
+    partes: list = [{"type": "text", "text": prompt}]
+    if image_path:
+        with open(image_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        mime = "image/png" if image_path.lower().endswith("png") else "image/jpeg"
+        partes.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
+
+    corpo = json.dumps({
+        "model": settings.GROQ_MODEL,
+        "messages": [{"role": "user", "content": partes}],
+        "response_format": {"type": "json_object"},
+        "temperature": 0,
+    }).encode()
+
+    req = urlrequest.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=corpo,
+        headers={
+            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        },
+    )
+    # urllib e não a lib da Groq: é uma chamada HTTP só, e evita mais uma
+    # dependência no requirements (o runner do GitHub Actions instala tudo
+    # a cada execução).
+    with urlrequest.urlopen(req, timeout=settings.GROQ_TIMEOUT_S) as resp:
+        resposta = json.loads(resp.read().decode())
+
+    try:
+        texto = resposta["choices"][0]["message"]["content"]
+        data = json.loads(texto)
+    except (KeyError, IndexError, json.JSONDecodeError, TypeError):
+        logger.warning("Groq não devolveu JSON válido: %r", resposta)
+        return ExtractedBet(texto_bruto=caption_text, confianca=0.0)
+
+    return _bet_do_json_do_llm(data, caption_text, image_path)
 
 
 # ==============================================================================
@@ -407,6 +507,22 @@ _CARD_LINE_IGNORE_KEYWORDS = re.compile(
     r"CRIAR APOSTA|APOSTA|COMBINADA|SIMPLES)\b",
     re.IGNORECASE,
 )
+
+
+# "handicap - 20.5" -> "handicap -20.5": cola o sinal no número.
+#
+# Com o sinal separado o mercado fica ambíguo pra quem lê ("handicap -
+# 20.5 França" parece usar o "-" como separador entre a palavra e o
+# número, não como sinal do handicap) e também pro resultado_checker, que
+# tem que adivinhar. Colado, "-20.5" é inequivocamente a linha.
+_HANDICAP_SINAL_SOLTO = re.compile(
+    r"\b(handicap(?:\s+de\s+pontos)?)\s*([+-])\s+(\d)", re.IGNORECASE,
+)
+
+
+def _normalizar_handicap(mercado: str) -> str:
+    """Cola o "+"/"-" no número do handicap (ver _HANDICAP_SINAL_SOLTO)."""
+    return _HANDICAP_SINAL_SOLTO.sub(r"\1 \2\3", mercado)
 
 
 def _find_players_in_card_line(texto: str) -> tuple[Optional[str], Optional[str]]:
@@ -689,7 +805,38 @@ _FAVORITO_IGNORE_WORDS = {
     # nome de jogador nenhum no texto.
     "pontos", "games", "sets", "mais", "menos", "acima", "abaixo",
     "total", "handicap", "over", "under",
+    # Verbos/pronomes de abertura de frase que sobraram. "Tem uma odd 3.10
+    # agora rolando no meu grupo..." (04/09/2026) virou jogador1="Tem" e
+    # mercado="Tem vencer a partida", e gerou notificação — era anúncio de
+    # venda de vaga, não tip.
+    "tem", "temos", "teremos", "vai", "vamos", "hoje", "amanha", "amanhã",
+    "agora", "ainda", "so", "só", "outra", "outro", "nova", "novo",
+    "ultima", "última", "ultimo", "último", "chance", "vaga", "vagas",
 }
+
+# Anúncio comercial: venda de vaga/acesso ao grupo, não tip.
+#
+# Esses textos citam uma odd de verdade ("uma odd 3.10 agora rolando"),
+# então o guard de "sem odd não é tip" não pega — e o regex de favorito
+# pesca a primeira palavra da frase como nome de jogador. Bug real
+# (#128, 04/09/2026): "Tem uma odd 3.10 agora rolando no meu grupo que ao
+# meu ver é MUITO DIFÍCIL de furar / Vou fechar as vagas em meia hora /
+# Última chance" foi notificada como aposta.
+_ANUNCIO_PATTERN = re.compile(
+    r"fechar\s+as\s+vagas|"
+    r"[úu]ltima\s+chance|"
+    r"(?:no|do|meu)\s+meu\s+grupo|"
+    r"rolando\s+no\s+meu\s+grupo|"
+    r"ap[óo]s\s+o\s+pagamento|"
+    r"link\s+pro\s+grupo|"
+    r"suporte:",
+    re.IGNORECASE,
+)
+
+
+def parece_anuncio(texto: Optional[str]) -> bool:
+    """O texto é propaganda de venda de vaga, não uma tip? Ver _ANUNCIO_PATTERN."""
+    return bool(texto and _ANUNCIO_PATTERN.search(texto))
 
 
 def find_favorite_only(texto: str) -> Optional[str]:
@@ -872,6 +1019,7 @@ def parse_free_text(texto: str) -> ExtractedBet:
     # -> "o Nº set" (ex: "o 2 set" -> "o 2º set").
     if mercado:
         mercado = re.sub(r"\bo (\d) set\b", r"o \1º set", mercado, flags=re.IGNORECASE)
+        mercado = _normalizar_handicap(mercado)
         if jogador1 and not jogador2 and jogador1.lower() not in mercado.lower():
             mercado = f"{jogador1} {mercado}"
 
@@ -916,6 +1064,17 @@ def parse_free_text(texto: str) -> ExtractedBet:
             "Texto parece print de conversa (bet-slip de terceiros) — descartando "
             "confronto/mercado extraídos: %r x %r / %r",
             jogador1, jogador2, mercado,
+        )
+        jogador1 = None
+        jogador2 = None
+        mercado = None
+
+    # Anúncio de venda de vaga: cita uma odd de verdade, então o guard de
+    # "sem odd não é tip" não pega. Ver parece_anuncio.
+    if parece_anuncio(texto) and (jogador1 or jogador2 or mercado):
+        logger.info(
+            "Texto parece anúncio de venda de vaga — descartando confronto/mercado "
+            "extraídos: %r x %r / %r", jogador1, jogador2, mercado,
         )
         jogador1 = None
         jogador2 = None
@@ -987,6 +1146,34 @@ def _extract_with_easyocr_and_text(
     return parse_free_text(texto_combinado)
 
 
+def _extrair_com_fallbacks(image_path: Optional[str], caption_text: str) -> ExtractedBet:
+    """Cadeia de fallback quando o Gemini falha: Groq -> EasyOCR -> texto puro.
+
+    O Groq vem primeiro porque é outro LLM: entende o print como a tip que
+    ele é (qual dos dois jogadores é o da aposta, múltipla vs simples), o
+    que nem o EasyOCR nem o parser de regex conseguem — eles leem o print
+    como texto cru. Ver extract_with_groq.
+
+    Se o Groq não estiver configurado (GROQ_API_KEY vazio) ou também
+    falhar, cai no EasyOCR local como antes — nunca levanta pro chamador.
+    """
+    if settings.GROQ_API_KEY:
+        try:
+            bet = extract_with_groq(image_path, caption_text)
+            if bet.valido or bet.odd is not None:
+                logger.info("Groq atendeu no lugar do Gemini.")
+                return bet
+            logger.warning("Groq respondeu, mas sem dado aproveitável — seguindo pro EasyOCR.")
+        except Exception:
+            logger.exception("Falha no Groq (backup do Gemini), seguindo pro EasyOCR.")
+
+    # 90s: generoso o bastante pra baixar os modelos na 1ª chamada de um
+    # runner novo (~200MB) e ler 1 imagem, mas curto o bastante pra sempre
+    # sobrar tempo dentro do timeout-minutes: 4 do workflow — ver docstring
+    # de _extract_with_easyocr_and_text.
+    return _extract_with_easyocr_and_text(image_path, caption_text, timeout_s=90.0)
+
+
 def extract_bet_info(image_path: Optional[str], caption_text: Optional[str] = None) -> ExtractedBet:
     """
     Ponto de entrada único do módulo.
@@ -1013,12 +1200,8 @@ def extract_bet_info(image_path: Optional[str], caption_text: Optional[str] = No
             # imagem, tenta o EasyOCR local como 2ª linha de defesa antes de
             # cair pro parser de só-texto — mesma lógica usada quando
             # OCR_ENGINE=easyocr (ver _extract_with_easyocr_and_text).
-            logger.exception("Falha ao usar Gemini, tentando EasyOCR como fallback.")
-            # 90s: generoso o bastante pra baixar os modelos na 1ª chamada
-            # de um runner novo (~200MB) e ler 1 imagem, mas curto o
-            # bastante pra sempre sobrar tempo dentro do timeout-minutes: 4
-            # do workflow — ver docstring de _extract_with_easyocr_and_text.
-            bet = _extract_with_easyocr_and_text(image_path, caption_text, timeout_s=90.0)
+            logger.exception("Falha ao usar Gemini, tentando os fallbacks.")
+            bet = _extrair_com_fallbacks(image_path, caption_text)
     else:
         bet = _extract_with_easyocr_and_text(image_path, caption_text)
 
