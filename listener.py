@@ -99,16 +99,22 @@ _SYNC_STATE_KEY = "listener_last_message_id"
 #
 # 30h e não 12h: o grupo do dia seguinte é criado no FIM DO DIA anterior e
 # já recebe tips ("vou adiantar as nossas bets de madrugada/amanhã cedo
-# agora logo", 04/09/2026 21:02). Se ele cria às 21h e o primeiro poll do
-# grupo só acontece na manhã seguinte — porque é quando você entra —, 12h
-# deixavam as primeiras tips de fora. Medido no grupo real: o Telegram
-# entrega o histórico anterior à entrada (o grupo de 04/09 mostra desde a
-# msg #1, de 03/09 17:35, mesmo tendo sido acessado só às 14:26), então a
-# única coisa que limitava era esta janela.
+# agora logo", 04/09/2026 21:02). O que a janela precisa cobrir é o
+# PIPELINE PARADO, não a entrada tardia no grupo: se as tips foram
+# postadas às 21h e o workflow ficou fora do ar (falha, cron não
+# disparado) até as 11h do dia seguinte, são 14h — e 12h descartariam
+# tudo silenciosamente.
 #
-# 30h cobre "criado ontem à noite, primeiro poll hoje à tarde" com folga e
-# ainda descarta um grupo genuinamente antigo (o de 2 dias atrás já está
-# fora, e _JANELA_GRUPOS_ATIVOS nem o entrega pra cá).
+# Medido no grupo real (04/09/2026): a entrada no grupo acontece na
+# véspera (msg #88, 03/09 23:22) e as tips vêm depois — a dos Lions foi
+# processada às 02:43. E o Telegram entrega até o que veio ANTES da
+# entrada: a msg #1 desse grupo é de 03/09 17:35, quase 6h antes de
+# entrar, e o Telethon a lê. Então o histórico nunca foi o limite; a
+# janela era.
+#
+# 30h cobre uma paralisação de mais de um dia e ainda descarta um grupo
+# genuinamente antigo (o de 2 dias atrás já está fora, e
+# _JANELA_GRUPOS_ATIVOS nem o entrega pra cá).
 _JANELA_PRIMEIRO_POLL = timedelta(hours=30)
 
 # Quando TELEGRAM_SOURCE_CHAT é um PREFIXO de nome, quais grupos com esse
