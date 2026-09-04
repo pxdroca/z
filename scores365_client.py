@@ -305,6 +305,7 @@ def find_canonical_match_365(
     referencia = referencia or datetime.now(timezone.utc)
 
     def _buscar(page: Page) -> Optional[CanonicalMatch]:
+        candidatos: list[CanonicalMatch] = []
         for offset in range(-dias_atras, dias_de_busca + 1):
             dia = referencia + timedelta(days=offset)
             for game in _fetch_games(page, dia, esporte):
@@ -325,19 +326,38 @@ def find_canonical_match_365(
                         jogador1, away, threshold
                     )
                 if casou:
-                    candidato = CanonicalMatch(
-                        jogador1_oficial=home,
-                        jogador2_oficial=away,
-                        torneio_oficial=_torneio_do_game(game),
-                        data_hora=_horario_do_game(game),
-                        sofascore_event_id=None,
+                    candidatos.append(
+                        CanonicalMatch(
+                            jogador1_oficial=home,
+                            jogador2_oficial=away,
+                            torneio_oficial=_torneio_do_game(game),
+                            data_hora=_horario_do_game(game),
+                            sofascore_event_id=None,
+                        )
                     )
-                    logger.info(
-                        "365scores confirmou: %s x %s | %s | %s",
-                        home, away, candidato.torneio_oficial, candidato.data_hora,
-                    )
-                    return candidato
-        return None
+
+        if not candidatos:
+            return None
+
+        # O jogador pode ter mais de um jogo na janela (rodadas seguidas do
+        # mesmo torneio). Escolhe o MAIS PRÓXIMO da referência em vez do
+        # primeiro encontrado — bug real (04/09/2026): buscando "Trotter"
+        # para uma tip de 04/09, o loop devolvia o jogo das oitavas de
+        # 02/09 só porque a varredura começa pelo dia mais antigo da
+        # janela, e o jogo certo era o das quartas.
+        def _distancia(c: CanonicalMatch) -> float:
+            if c.data_hora is None:
+                return float("inf")
+            return abs((c.data_hora - referencia).total_seconds())
+
+        melhor = min(candidatos, key=_distancia)
+        logger.info(
+            "365scores confirmou: %s x %s | %s | %s%s",
+            melhor.jogador1_oficial, melhor.jogador2_oficial,
+            melhor.torneio_oficial, melhor.data_hora,
+            f" (de {len(candidatos)} jogos do mesmo jogador na janela)" if len(candidatos) > 1 else "",
+        )
+        return melhor
 
     resultado = _run_with_browser(_buscar)
     if resultado is None:
