@@ -413,24 +413,28 @@
   height: 2rem;
   min-width: 0;
   padding: 0 0.4rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border);
+  /* Cor da marca no estado normal, não só no hover: as logos são brancas
+     (desenhadas pra fundo colorido) e sobre vidro neutro os três botões
+     ficavam iguais entre si — só se distinguiam pelo desenho da logo.
+
+     Tint diluído em vez do fundo cheio da versão antiga: o vermelho da
+     Superbet e o laranja da Betano em área sólida puxavam o olho pra
+     baixo do card, competindo com o resultado da aposta. Nesta
+     proporção a marca é reconhecível de relance e continua secundária. */
+  background: color-mix(in srgb, var(--marca) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--marca) 42%, transparent);
   border-radius: var(--radius-sm);
   text-decoration: none !important;
-  /* Secundário sem ficar ilegível: as logos são brancas (feitas pra fundo
-     colorido), então um pouco de transparência já basta pra recuar
-     visualmente — abaixo de ~0.9 o contraste cai demais no grafite. */
-  opacity: 0.9;
+  opacity: 0.92;
   transition: opacity 0.15s var(--ease), background-color 0.15s var(--ease), border-color 0.15s var(--ease),
     transform 0.15s var(--ease);
 }
 
-/* No hover a cor da marca aparece — mas só como um tint de fundo bem
-   diluído (color-mix com o fundo do card), nunca o fundo cheio. */
+/* No hover a marca ganha corpo — sem chegar ao fundo cheio. */
 .bookmakerBtn:hover {
   opacity: 1;
-  background: color-mix(in srgb, var(--marca) 16%, transparent);
-  border-color: color-mix(in srgb, var(--marca) 40%, transparent);
+  background: color-mix(in srgb, var(--marca) 34%, transparent);
+  border-color: color-mix(in srgb, var(--marca) 62%, transparent);
   transform: translateY(-1px);
 }
 

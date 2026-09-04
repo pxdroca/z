@@ -980,16 +980,19 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
     ctx.fillStyle = periodo.cor;
     ctx.font = "800 24px Inter, sans-serif";
     ctx.textBaseline = "middle";
-    ctx.fillText(periodo.label, PAD + 38, headerCy + 1);
+    const xLabel = PAD + 38;
+    ctx.fillText(periodo.label, xLabel, headerCy + 1);
+    const larguraLabel = ctx.measureText(periodo.label).width;
 
-    // Contagem numa cápsula discreta — é meta-informação da seção, não um
-    // status de aposta (os status é que perderam o fundo).
+    // Contagem numa cápsula discreta, logo APÓS o rótulo (não na borda
+    // direita): assim ela lê como parte do título da seção — "MANHÃ, 5
+    // jogos" — em vez de um número solto do outro lado da imagem.
     const cont = `${doPeriodo.length} ${doPeriodo.length === 1 ? "jogo" : "jogos"}`;
     ctx.font = "600 20px Inter, sans-serif";
-    const contW = ctx.measureText(cont).width + 28;
-    const contX = LARGURA - PAD - contW;
+    const contW = ctx.measureText(cont).width + 26;
+    const contX = xLabel + larguraLabel + 14;
     ctx.fillStyle = "rgba(255,255,255,0.05)";
-    roundRect(ctx, contX, headerCy - 16, contW, 32, 16);
+    roundRect(ctx, contX, headerCy - 15, contW, 30, 15);
     ctx.fill();
     ctx.fillStyle = "#6b7280";
     ctx.textAlign = "center";
