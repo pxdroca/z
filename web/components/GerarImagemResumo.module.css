@@ -126,7 +126,21 @@
   display: none;
 }
 
+/* Separa o "Todas" (que age sobre todos) dos chips de grupo (que agem
+   sobre um só) — sem essa divisa os seis chips parecem seis opções do
+   mesmo tipo, e "Todas" some no meio. */
+.separadorChips {
+  flex: 0 0 auto;
+  width: 1px;
+  align-self: stretch;
+  margin: 0.15rem 0.2rem;
+  background: var(--border);
+}
+
 .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.35rem 0.7rem;
   background: rgba(255, 255, 255, 0.045);
   border: 1px solid var(--border);
@@ -137,6 +151,19 @@
   font-weight: 550;
   white-space: nowrap;
   transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+/* Quantas apostas o grupo tem: um grupo vazio marcado não muda a imagem,
+   e sem o número isso só se descobre depois de clicar. */
+.contagemChip {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.chipAtivo .contagemChip {
+  color: var(--text-secondary);
 }
 
 .chip:hover {

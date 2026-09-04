@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { grupoDaBet, type GrupoId } from "@/lib/agrupamento";
+import { contarPorGrupo, GRUPO_LABEL, GRUPOS, grupoDaBet, type GrupoId } from "@/lib/agrupamento";
 import { canvasParaBlob, desenharResumoDoDia } from "@/lib/imagemResumo";
 import type { Bet } from "@/lib/types";
 import { CopyIcon, DownloadIcon, ImageIcon, ShareIcon, XIcon } from "./icons";
@@ -10,29 +10,15 @@ import styles from "./GerarImagemResumo.module.css";
 
 const NOME_ARQUIVO = "jogos-do-dia.png";
 
-/** Filtro de quais apostas entram na imagem. "todas" mantém o
- *  comportamento anterior; os demais recortam por grupo (o mesmo
- *  agrupamento do painel, ver lib/agrupamento.ts). */
-type FiltroImagem = "todas" | GrupoId | "em_aberto";
+/** Quais grupos entram na imagem. Multi-seleção: cada chip marca ou
+ *  desmarca um grupo, e "Todas" alterna entre tudo marcado e nada
+ *  marcado. Antes era um filtro por vez (rádio), o que impedia
+ *  combinações óbvias como "green + red" (o dia fechado, sem o que ainda
+ *  está em jogo). Ver lib/agrupamento.ts para os grupos. */
+type Selecao = Set<GrupoId>;
 
-/** Grupos que cada opção do filtro aceita. "Em aberto" junta pendentes e
- *  ao vivo: das duas o resultado ainda não saiu, e separá-las dava duas
- *  listas curtas quando o interessante é "o que ainda está em jogo". */
-const GRUPOS_DO_FILTRO: Record<Exclude<FiltroImagem, "todas">, GrupoId[]> = {
-  green: ["green"],
-  red: ["red"],
-  void: ["void"],
-  ao_vivo: ["ao_vivo"],
-  pendentes: ["pendentes"],
-  em_aberto: ["pendentes", "ao_vivo"],
-};
-
-const OPCOES_FILTRO: { id: FiltroImagem; label: string }[] = [
-  { id: "todas", label: "Todas" },
-  { id: "green", label: "Green" },
-  { id: "red", label: "Red" },
-  { id: "em_aberto", label: "Em aberto" },
-];
+/** Ordem dos chips: primeiro o que já saiu, depois o que está em jogo. */
+const ORDEM_CHIPS: GrupoId[] = ["green", "red", "void", "ao_vivo", "pendentes"];
 
 /**
  * O navegador atual consegue copiar imagem e compartilhar arquivo?
@@ -80,15 +66,29 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
   const blobRef = useRef<Blob | null>(null);
   const avisoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [filtro, setFiltro] = useState<FiltroImagem>("todas");
+  // Começa com todos os grupos marcados — o mesmo conteúdo que o antigo
+  // "Todas" gerava por padrão.
+  const [selecao, setSelecao] = useState<Selecao>(() => new Set(GRUPOS));
 
-  const gerar = useCallback(async (alvo: FiltroImagem) => {
-    setGerando(true);
+  const gerar = useCallback(async (alvo: Selecao) => {
     setAberto(true);
     setAviso(null);
+
+    // Nada marcado: a imagem sairia só com cabeçalho e rodapé, e os
+    // botões de copiar/baixar entregariam um arquivo vazio. Descarta a
+    // prévia e deixa o modal pedir uma seleção.
+    if (alvo.size === 0) {
+      if (urlAnteriorRef.current) URL.revokeObjectURL(urlAnteriorRef.current);
+      urlAnteriorRef.current = null;
+      blobRef.current = null;
+      setImagemUrl(null);
+      setGerando(false);
+      return;
+    }
+
+    setGerando(true);
     try {
-      const aceitos = alvo === "todas" ? null : GRUPOS_DO_FILTRO[alvo];
-      const selecionadas = aceitos ? bets.filter((b) => aceitos.includes(grupoDaBet(b))) : bets;
+      const selecionadas = bets.filter((b) => alvo.has(grupoDaBet(b)));
       const canvas = desenharResumoDoDia(selecionadas);
       const blob = await canvasParaBlob(canvas);
       blobRef.current = blob;
@@ -164,6 +164,38 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
   // não tem folha de compartilhamento de arquivo.
   const [capacidades] = useState(detectarCapacidades);
 
+  // Contagem por grupo pra mostrar no chip: sem isso o usuário só
+  // descobre que um grupo está vazio depois de marcar e ver a imagem.
+  const contagemPorGrupo = useMemo(() => contarPorGrupo(bets), [bets]);
+
+  const todosMarcados = selecao.size === GRUPOS.length;
+
+  // O próximo conjunto é calculado a partir de `selecao` (não dentro do
+  // updater do setState): gerar() faz trabalho de verdade — desenha o
+  // canvas e cria um object URL — e um updater precisa ser puro, senão em
+  // StrictMode isso roda duas vezes por clique.
+  const aplicar = useCallback(
+    (proximo: Selecao) => {
+      setSelecao(proximo);
+      void gerar(proximo);
+    },
+    [gerar],
+  );
+
+  const alternarGrupo = useCallback(
+    (g: GrupoId) => {
+      const proximo = new Set(selecao);
+      if (proximo.has(g)) proximo.delete(g);
+      else proximo.add(g);
+      aplicar(proximo);
+    },
+    [aplicar, selecao],
+  );
+
+  const alternarTodos = useCallback(() => {
+    aplicar(todosMarcados ? new Set() : new Set(GRUPOS));
+  }, [aplicar, todosMarcados]);
+
   function fechar() {
     setAberto(false);
   }
@@ -172,7 +204,7 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
     <>
       <button
         className={styles.trigger}
-        onClick={() => gerar(filtro)}
+        onClick={() => gerar(selecao)}
         aria-label="Gerar imagem dos jogos do dia"
         title="Gerar imagem dos jogos do dia"
       >
@@ -194,28 +226,40 @@ export function GerarImagemResumo({ bets }: { bets: Bet[] }) {
               </button>
             </div>
 
-            {/* Filtro: regera a imagem só com o grupo escolhido. Mesmo
-                agrupamento do painel, então "Green" aqui e "Green" lá
-                significam exatamente a mesma coisa. */}
+            {/* Filtro multi-seleção: cada chip liga/desliga um grupo e a
+                imagem é regerada. Mesmo agrupamento do painel, então
+                "Green" aqui e "Green" lá significam a mesma coisa. */}
             <div className={styles.filtros}>
-              {OPCOES_FILTRO.map((o) => (
-                <button
-                  key={o.id}
-                  className={o.id === filtro ? `${styles.chip} ${styles.chipAtivo}` : styles.chip}
-                  onClick={() => {
-                    setFiltro(o.id);
-                    void gerar(o.id);
-                  }}
-                  aria-pressed={o.id === filtro}
-                >
-                  {o.label}
-                </button>
-              ))}
+              <button
+                className={todosMarcados ? `${styles.chip} ${styles.chipAtivo}` : styles.chip}
+                onClick={alternarTodos}
+                aria-pressed={todosMarcados}
+                title={todosMarcados ? "Desmarcar todos" : "Marcar todos"}
+              >
+                Todas
+              </button>
+              <span className={styles.separadorChips} aria-hidden="true" />
+              {ORDEM_CHIPS.map((g) => {
+                const marcado = selecao.has(g);
+                return (
+                  <button
+                    key={g}
+                    className={marcado ? `${styles.chip} ${styles.chipAtivo}` : styles.chip}
+                    onClick={() => alternarGrupo(g)}
+                    aria-pressed={marcado}
+                  >
+                    {GRUPO_LABEL[g]}
+                    <span className={styles.contagemChip}>{contagemPorGrupo[g]}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <div className={styles.preview}>
               {gerando ? (
                 <div className={styles.carregando}>Gerando imagem…</div>
+              ) : selecao.size === 0 ? (
+                <div className={styles.carregando}>Marque ao menos um filtro.</div>
               ) : imagemUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element -- imagem gerada em runtime (blob URL), não um asset estático
                 <img src={imagemUrl} alt="Resumo dos jogos do dia" className={styles.imagem} />
