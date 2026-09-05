@@ -262,8 +262,12 @@
     width: auto;
     max-width: calc(100vw - 2rem);
     justify-content: center;
-    gap: 0.35rem;
-    padding: 0.4rem;
+    /* Dock maior: os botões tinham 38px, abaixo dos 44px que a Apple
+       recomenda como alvo mínimo de toque — no polegar, errar o ícone era
+       fácil. Com 48px de botão (ver .headerAcoes button abaixo) e mais
+       respiro, a barra vai a ~64px de altura. */
+    gap: 0.4rem;
+    padding: 0.5rem;
     /* Vidro GROSSO: blur alto + fundo bem mais opaco. O dock flutua SOBRE
        o conteúdo, então precisa escurecer e desfocar forte o que passa
        atrás — com o vidro fino dos cards, os cards apareciam através da
@@ -295,6 +299,49 @@
     box-shadow: none !important;
   }
 
+  /* Alvo de toque de 48px (era 38). Precisa alcançar tanto os botões
+     diretos quanto os que vivem dentro de um wrapper (busca, Filtros) —
+     mesma razão do seletor descendente da regra de vidro acima. */
+  .headerAcoes button,
+  .headerAcoes > div,
+  .headerAcoes > div > button {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  /* A busca ABERTA vira um campo de texto largo — largura fixa a
+     espremeria, então volta a ser automática.
+
+     E o dock inteiro passa a ocupar a largura da tela nesse estado: com
+     botões de 48px, o campo de busca mais os outros 4 ícones não cabiam
+     em 390px e o botão de Filtros era empurrado pra fora (medido: dock
+     de 358px, o último ícone cortado). Ocupando a largura toda, o campo
+     encolhe o necessário e todos continuam alcançáveis. */
+  .headerAcoes > div[class*="wrapperAberto"],
+  .headerAcoes > div[class*="wrapperAberto"] input {
+    width: auto;
+    min-width: 0;
+  }
+
+  .headerAcoes:has(div[class*="wrapperAberto"]) {
+    width: calc(100vw - 2rem);
+    justify-content: space-between;
+  }
+
+  .headerAcoes:has(div[class*="wrapperAberto"]) > div[class*="wrapperAberto"] {
+    flex: 1 1 auto;
+  }
+
+  /* Ícones proporcionalmente maiores: com 15px num botão de 48 eles
+     ficavam perdidos no meio do alvo. `flex-shrink: 0` porque o SVG é
+     filho de um flex container e estava sendo achatado num dos eixos
+     (medido: 15x19 em vez de 19x19). */
+  .headerAcoes svg {
+    width: 19px;
+    height: 19px;
+    flex-shrink: 0;
+  }
+
   /* Exceção: a busca ABERTA precisa de um fundo próprio pra o campo de
      texto se distinguir do resto do dock. */
   .headerAcoes > div[class*="wrapperAberto"] {
@@ -311,8 +358,9 @@
 @media (max-width: 640px) {
   .container {
     padding: 1.25rem 1rem 3rem;
-    /* Espaço pro dock flutuante não cobrir o último card. */
-    padding-bottom: 6.5rem;
+    /* Espaço pro dock flutuante não cobrir o último card — acompanha a
+       altura da barra (subiu de 52 pra ~64px). */
+    padding-bottom: 7.25rem;
   }
   .appHeader {
     font-size: 1.4rem;
