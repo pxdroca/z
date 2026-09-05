@@ -305,6 +305,12 @@ def _data_hora_do_card(horario_texto: str, referencia: Optional[datetime]) -> Op
 # jogador em OUTRO dia do torneio — que seria o confronto errado.
 _JANELA_CONFRONTO_ANTERIOR = timedelta(hours=12)
 
+# Quanto tempo DEPOIS do início do jogo uma tip ainda pode se referir a
+# ele. O tipster manda a tip antes do jogo; 2h cobre a aposta ao vivo
+# ("Fulano vencer o 2º set" com a partida rolando), que é real, sem
+# alcançar o jogo da manhã quando a tip é da noite.
+_TOLERANCIA_TIP_AO_VIVO = timedelta(hours=2)
+
 
 def _confronto_de_aposta_anterior(
     jogador1: str, esporte: str, referencia: Optional[datetime]
@@ -335,10 +341,34 @@ def _confronto_de_aposta_anterior(
             continue
         if bet.data_hora is None:
             continue
-        # O jogo tem que estar na mesma janela: o mesmo jogador joga de
-        # novo em outro dia do torneio, e aí o confronto é outro.
-        if abs((bet.data_hora - ancora).total_seconds()) > _JANELA_CONFRONTO_ANTERIOR.total_seconds():
+
+        # O jogo NÃO pode já ter começado quando a tip chegou.
+        #
+        # Bug real (05/09/2026): a janela era simétrica (abs()), então
+        # aceitava jogo no passado. As tips de Clarke, Cerúndolo e Potenza
+        # chegaram 21:2x pro dia seguinte e casaram com os jogos DE HOJE
+        # (10:38, 13:10, 12:51) — dentro das 12h pra trás. O score_updater
+        # depois leu o placar daqueles jogos, já encerrados, e gravou
+        # green/red numa aposta que nem tinha começado.
+        #
+        # O tipster manda a tip ANTES do jogo, sempre. Uma tolerância
+        # pequena cobre a tip mandada com o jogo já rolando ("aposta ao
+        # vivo"), que acontece, sem alcançar o jogo da manhã.
+        atraso = (ancora - bet.data_hora).total_seconds()
+        if atraso > _TOLERANCIA_TIP_AO_VIVO.total_seconds():
             continue
+
+        # E também não pode estar longe demais no futuro: o mesmo jogador
+        # joga de novo em outro dia do torneio, e aí o confronto é outro.
+        if (bet.data_hora - ancora) > _JANELA_CONFRONTO_ANTERIOR:
+            continue
+
+        # Nota: NÃO dá pra filtrar por `bet.status == encerrada` aqui. O
+        # status é o de AGORA, não o de quando a tip chegou — no
+        # reprocessamento de uma tip antiga o jogo já terminou, e o filtro
+        # rejeitaria um confronto que na hora era legítimo. Quem separa os
+        # dois casos é a comparação de tempo acima, que usa a referência
+        # da tip.
         if not (
             names_match(jogador1, bet.jogador1, threshold)
             or names_match(jogador1, bet.jogador2, threshold)
@@ -688,6 +718,32 @@ def find_match(
             canonico = find_canonical_match_by_name(
                 jogador1, esporte=esporte, referencia=referencia, aceitar_duplas=prefere_duplas
             )
+
+    # CINTO DE SEGURANÇA, valendo pra QUALQUER fonte: o confronto aceito
+    # não pode ser um jogo que já começou bem antes da tip.
+    #
+    # A checagem existe dentro de _confronto_de_aposta_anterior, mas
+    # precisa valer também pro que vem da Superbet, do 365scores e do
+    # SofaScore — qualquer uma delas pode devolver o jogo de hoje quando a
+    # tip é pra amanhã, e o efeito é o pior possível: o score_updater lê o
+    # placar de um jogo encerrado e grava green/red numa aposta que nem
+    # começou (bug real de 05/09/2026 com Clarke, Cerúndolo e Potenza).
+    #
+    # Melhor "não encontrada" (que o retry do score_updater reprocessa
+    # depois, quando o jogo de amanhã já estiver listado) do que um
+    # resultado inventado.
+    if canonico is not None and canonico.data_hora is not None:
+        ancora = referencia or datetime.now(timezone.utc)
+        atraso = (ancora - canonico.data_hora).total_seconds()
+        if atraso > _TOLERANCIA_TIP_AO_VIVO.total_seconds():
+            logger.warning(
+                "Confronto DESCARTADO para %r: %s x %s começou em %s, %.1fh antes da tip — "
+                "provavelmente é o jogo de outro dia.",
+                jogador1, canonico.jogador1_oficial, canonico.jogador2_oficial,
+                canonico.data_hora.isoformat(), atraso / 3600,
+            )
+            canonico = None
+            link_superbet = None
 
     # Nomes/torneio/hora "oficiais": usa o que o SofaScore confirmou, ou
     # cai para o que o OCR extraiu, se o SofaScore não achar nada.
