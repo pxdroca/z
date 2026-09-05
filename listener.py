@@ -79,7 +79,7 @@ from database import (
     set_sync_state,
     update_resultado,
 )
-from extractor import detectar_aviso_cashout, extract_bet_info
+from extractor import detectar_aviso_cashout, e_abertura_de_grupo, extract_bet_info
 from matcher import build_enabled_adapters, find_match, horario_da_primeira_selecao
 from models import Bet, BetStatus, Esporte, ExtractedBet, MatchInfo, ResultadoAposta, TipoAposta
 from nameutils import names_match
@@ -236,6 +236,22 @@ async def _resolver_chats_de_origem(client: TelegramClient) -> list:
         raw, [d.name for d in ativos], len(candidatos),
     )
 
+    # Havendo mais de um grupo vivo, o do dia SEGUINTE já está no ar — e os
+    # anteriores a ele não recebem mais tip nova, só conversa e algum
+    # cash-out atrasado. Marca isso pra que process_message recuse tip
+    # vinda de grupo velho (ver _grupo_esta_encerrado).
+    #
+    # O marco confiável é a mensagem "Chat do grupo: <link>" que abre o
+    # grupo novo (ideia do usuário) — mas ela chega DENTRO do grupo novo,
+    # não do velho. Aqui, olhando todos os grupos de uma vez, o mesmo fato
+    # se expressa de forma mais direta: existe um grupo mais recente que
+    # este. A checagem do link continua valendo como confirmação em
+    # process_message.
+    if len(ativos) > 1:
+        for d in ativos[:-1]:
+            if not _grupo_esta_encerrado(d.id):
+                _marcar_grupo_encerrado(d.id)
+
     await _sair_de_grupos_velhos(client, candidatos, ativos)
     return [d.entity for d in ativos]
 
@@ -277,6 +293,30 @@ async def _sair_de_grupos_velhos(client: TelegramClient, candidatos: list, ativo
             )
         except Exception:
             logger.exception("Não consegui sair do grupo %r — seguindo.", dialog.name)
+
+
+# Prefixo da chave que marca "este grupo não recebe mais tip nova".
+_CHAVE_GRUPO_ENCERRADO = "grupo_encerrado"
+
+
+def _marcar_grupo_encerrado(chat_id: Optional[int]) -> None:
+    """Registra que um grupo parou de receber tips.
+
+    Chamado quando o grupo do dia SEGUINTE publica seu "Chat do grupo:
+    <link>" — a partir daí o grupo anterior só tem conversa e, raramente,
+    um aviso de cash-out atrasado.
+    """
+    if chat_id is None:
+        return
+    set_sync_state(f"{_CHAVE_GRUPO_ENCERRADO}:{chat_id}", "1")
+    logger.info("Grupo %s marcado como encerrado para tips novas.", chat_id)
+
+
+def _grupo_esta_encerrado(chat_id: Optional[int]) -> bool:
+    """O grupo já foi marcado como encerrado? Ver _marcar_grupo_encerrado."""
+    if chat_id is None:
+        return False
+    return get_sync_state(f"{_CHAVE_GRUPO_ENCERRADO}:{chat_id}") == "1"
 
 
 async def _processar_aviso_cashout(mensagem_id: int, chat_id: Optional[int], nome_citado: str, caption: str) -> None:
@@ -371,6 +411,38 @@ async def process_message(message: Message) -> None:
     # despachamos para uma thread separada pra não travar o loop asyncio
     # (Telethon) enquanto processa.
     extracted: ExtractedBet = await asyncio.to_thread(extract_bet_info, image_path, caption)
+
+    # Tip num grupo já encerrado não é tip de hoje.
+    #
+    # Depois que o grupo do dia seguinte publica seu "Chat do grupo:
+    # <link>", o grupo anterior só recebe conversa e, raramente, um aviso
+    # de cash-out atrasado (que é tratado ACIMA e continua funcionando —
+    # esta checagem vem depois dele de propósito). Uma "tip" que aparece
+    # aqui é quase sempre o tipster comentando o dia que passou, e casá-la
+    # com um jogo produziria exatamente o erro de 05/09/2026: aposta nova
+    # apontando pra partida já encerrada.
+    #
+    # Ideia do usuário: o link é um marco explícito do tipster, bem mais
+    # confiável que adivinhar pela data.
+    if _grupo_esta_encerrado(chat_id) and extracted.valido:
+        logger.info(
+            "Mensagem %s do chat %s ignorada como tip: o grupo já foi encerrado "
+            "(o do dia seguinte publicou o link). Texto: %r",
+            message.id, chat_id, caption[:120],
+        )
+        insert_bet(Bet(
+            jogador1=extracted.jogador1 or "?",
+            jogador2=extracted.jogador2 or "?",
+            mercado="[tip em grupo encerrado — ignorada]",
+            odd=extracted.odd,
+            status=BetStatus.ERRO_EXTRACAO.value,
+            fonte_texto=extracted.texto_bruto,
+            mensagem_id=message.id,
+            chat_id=chat_id,
+            unidades=1.0,
+            esporte=extracted.esporte,
+        ))
+        return
 
     if not extracted.valido:
         logger.warning("Mensagem %s: extração insuficiente (faltam jogadores). Texto: %r", message.id, caption[:200])
@@ -577,13 +649,18 @@ async def poll_new_messages() -> None:
         chats = await _resolver_chats_de_origem(client)
         for chat in chats:
             try:
-                await _poll_chat(client, chat)
+                await _poll_chat(client, chat, irmaos=chats)
             except Exception:
                 logger.exception("Erro ao ler o chat %s", getattr(chat, "title", chat))
 
 
-async def _poll_chat(client: TelegramClient, chat) -> None:
-    """Lê as mensagens novas de UM chat e atualiza o ponteiro dele."""
+async def _poll_chat(client: TelegramClient, chat, irmaos: Optional[list] = None) -> None:
+    """Lê as mensagens novas de UM chat e atualiza o ponteiro dele.
+
+    `irmaos` são os outros grupos do mesmo prefixo lidos neste ciclo —
+    usados pra reagir ao "Chat do grupo: <link>": quando ELE aparece aqui,
+    este é o grupo do dia novo e os demais estão encerrados.
+    """
     sync_key = f"{_SYNC_STATE_KEY}:{chat.id}"
 
     last_id_raw = get_sync_state(sync_key)
@@ -642,6 +719,20 @@ async def _poll_chat(client: TelegramClient, chat) -> None:
     # ponteiro nunca pula uma mensagem não processada.
     maior_id = min_id
     for message in mensagens:
+        # "Chat do grupo: <link>" aqui significa que ESTE é o grupo do dia
+        # novo — então os irmãos já não recebem tip. É o marco explícito do
+        # tipster (ideia do usuário), e vem ANTES de processar a mensagem
+        # pra que a marcação já valha para as tips deste mesmo lote.
+        if e_abertura_de_grupo(message.raw_text or "") and irmaos:
+            for outro in irmaos:
+                if outro.id != chat.id and not _grupo_esta_encerrado(outro.id):
+                    logger.info(
+                        "Grupo %r abriu (link na msg %s) — encerrando %r para tips novas.",
+                        getattr(chat, "title", chat.id), message.id,
+                        getattr(outro, "title", outro.id),
+                    )
+                    _marcar_grupo_encerrado(outro.id)
+
         try:
             await process_message(message)
         except Exception:

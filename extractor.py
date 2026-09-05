@@ -904,6 +904,33 @@ def parece_anuncio(texto: Optional[str]) -> bool:
     return bool(texto and _ANUNCIO_PATTERN.search(texto))
 
 
+# "Chat do grupo: https://t.me/+..." — a mensagem de ABERTURA que o tipster
+# posta quando cria o grupo do dia.
+#
+# Serve de marco temporal explícito, e é bem mais confiável que adivinhar
+# pela data: a partir dela, o grupo ANTERIOR já não recebe tip nova (só
+# conversa e, raramente, um aviso de cash-out atrasado). Observado nos
+# grupos reais: msg #44 no grupo de 04/09, msg #12 no de 05/09 — sempre
+# nas primeiras mensagens.
+#
+# O padrão exige o link de convite (t.me/+ ou t.me/joinchat) logo após a
+# expressão: sem isso ele casaria com "No chat do grupo a galera manda o
+# link da odd 100" e com o anúncio de pagamento ("...vai abrir o link pro
+# grupo / Suporte: T.me/suportecansadao"), que são outra coisa.
+_ABERTURA_GRUPO_PATTERN = re.compile(
+    r"chat\s+do\s+grupo\s*:?\s*(?:\n|\s)*https?://t\.me/(?:\+|joinchat/)",
+    re.IGNORECASE,
+)
+
+
+def e_abertura_de_grupo(texto: Optional[str]) -> bool:
+    """A mensagem é o "Chat do grupo: <link>" que abre o grupo do dia?
+
+    Ver _ABERTURA_GRUPO_PATTERN para por que o link é exigido.
+    """
+    return bool(texto and _ABERTURA_GRUPO_PATTERN.search(texto))
+
+
 def find_favorite_only(texto: str) -> Optional[str]:
     """Último recurso: acha o nome do jogador favorito quando o tipster cita
     só ele (sem adversário) — ver _FAVORITO_UNICO_PATTERN acima."""
