@@ -588,18 +588,30 @@ def _confronto_pela_superbet(
     if card is None:
         return None, None
 
-    if exigir_hoje and not _card_eh_hoje(card.horario_texto):
-        # A Superbet só lista jogo aberto pra aposta: se o card não é de
-        # hoje, o jogo de hoje deste jogador já acabou e o que sobrou na
-        # busca é o de amanhã. Confirmar por ele grava a aposta no
-        # confronto errado — bug real com "de la torre" (ver docstring de
-        # buscar_confronto_na_superbet).
-        logger.info(
-            "Superbet achou %s x %s, mas o card não é de hoje — "
-            "provavelmente o jogo de hoje já encerrou; ignorando esse card.",
-            card.jogador1, card.jogador2,
-        )
-        return None, None
+    # O card serve se o jogo dele começa DEPOIS da tip (com a tolerância
+    # de aposta ao vivo). O critério antes era "o card é de hoje?", o que
+    # está errado nas duas pontas:
+    #
+    #   - tip de fim de noite PRA AMANHÃ (o padrão do tipster: as bets do
+    #     dia seguinte saem por volta das 21h) tem card "Amanhã, HH:MM",
+    #     que era descartado. Foi o que aconteceu com Cerúndolo e Potenza
+    #     em 05/09/2026: a Superbet achou "Taylor Fritz x Francisco
+    #     Cerundolo, Amanhã 12:30" — o jogo CERTO — e o código jogou fora.
+    #   - o caso que o "exigir_hoje" queria evitar (tip de manhã, jogo já
+    #     encerrado, a Superbet devolve o de amanhã) continua coberto, e
+    #     melhor: agora a comparação é com o horário real do card, não com
+    #     o rótulo do dia.
+    horario_card = _data_hora_do_card(card.horario_texto, referencia)
+    if exigir_hoje and horario_card is not None:
+        ancora = referencia or datetime.now(timezone.utc)
+        atraso = (ancora - horario_card).total_seconds()
+        if atraso > _TOLERANCIA_TIP_AO_VIVO.total_seconds():
+            logger.info(
+                "Superbet achou %s x %s, mas o card começa em %s — %.1fh ANTES da tip; "
+                "esse jogo já passou, ignorando.",
+                card.jogador1, card.jogador2, horario_card.isoformat(), atraso / 3600,
+            )
+            return None, None
 
     # Só vale reconsultar as fontes esportivas se a Superbet trouxe nomes
     # DIFERENTES dos que já falharam (typo corrigido, apelido expandido).
@@ -619,7 +631,7 @@ def _confronto_pela_superbet(
         if confirmado is not None:
             return confirmado, card.link
 
-    data_hora = _data_hora_do_card(card.horario_texto, referencia)
+    data_hora = horario_card
     logger.info(
         "Confronto aceito pela Superbet (nenhuma fonte esportiva confirmou): "
         "%s x %s | card=%r | horário=%s",
@@ -700,9 +712,11 @@ def find_match(
         # fontes esportivas deixa de ser adivinhação e vira confirmação de
         # um confronto específico (é o que _confronto_pela_superbet faz).
         #
-        # exigir_hoje: sem o adversário, um card de amanhã quase sempre
-        # significa que o jogo de hoje desse jogador já acabou — aceitar
-        # gravaria a aposta no confronto errado.
+        # exigir_hoje aqui NÃO quer dizer "o card tem que ser de hoje" (o
+        # tipster manda as tips do dia seguinte por volta das 21h, e o card
+        # certo é o de amanhã). Quer dizer "o card não pode ser de um jogo
+        # que já começou antes da tip" — ver _confronto_pela_superbet.
+        #
         # ANTES de tudo: o confronto pode já estar gravado numa aposta
         # anterior do mesmo jogo. É a fonte mais confiável que existe (foi
         # confirmada por uma fonte esportiva na primeira vez) e a mais
