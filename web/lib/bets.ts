@@ -171,6 +171,67 @@ export async function insertBetManual(dados: NovaBetManual): Promise<Bet> {
   return rowToBet(rows[0]);
 }
 
+/** Campos que o painel deixa editar numa aposta já existente.
+ *
+ *  Fora daqui de propósito: `id`, `mensagem_id`/`chat_id` (a identidade da
+ *  mensagem do Telegram, que garante a idempotência do listener),
+ *  `criado_em` e `fonte_texto` — mexer neles quebraria o rastro de como a
+ *  aposta chegou, sem nenhum ganho pra quem corrige um erro na tela. */
+export interface CamposEditaveis {
+  jogador1?: string;
+  /** NOT NULL no banco — vazio é "", nunca null (ver a rota PATCH). */
+  jogador2?: string;
+  torneio?: string | null;
+  mercado?: string | null;
+  odd?: number | null;
+  unidades?: number;
+  data_hora?: string | null;
+  esporte?: string;
+  status?: BetStatus;
+  resultado?: ResultadoAposta;
+  placar_final?: string | null;
+  vencedor_partida?: string | null;
+  sofascore_event_id?: number | null;
+}
+
+/** Colunas aceitas no UPDATE, para montar a query só com o que veio. */
+const COLUNAS_EDITAVEIS = [
+  "jogador1", "jogador2", "torneio", "mercado", "odd", "unidades",
+  "data_hora", "esporte", "status", "resultado", "placar_final",
+  "vencedor_partida", "sofascore_event_id",
+] as const;
+
+/**
+ * Atualiza qualquer subconjunto dos campos editáveis de uma aposta.
+ *
+ * Existe porque o painel só permitia mexer em status e resultado — para
+ * corrigir um confronto errado, um horário ou uma odd era preciso ir ao
+ * banco à mão. Com isto, quem vê o erro na tela conserta ali mesmo.
+ *
+ * Monta SET dinâmico, mas SEMPRE com placeholders numerados e com o nome
+ * da coluna vindo de COLUNAS_EDITAVEIS (lista fixa no código) — nada do
+ * que o cliente manda entra na string SQL.
+ */
+export async function updateBetCampos(id: number, campos: CamposEditaveis): Promise<void> {
+  const sets: string[] = [];
+  const valores: unknown[] = [];
+
+  for (const coluna of COLUNAS_EDITAVEIS) {
+    const valor = (campos as Record<string, unknown>)[coluna];
+    if (valor === undefined) continue;   // não enviado = não muda
+    valores.push(valor);
+    sets.push(`${coluna} = $${valores.length}`);
+  }
+
+  if (sets.length === 0) return;
+
+  valores.push(id);
+  await getPool().query(
+    `UPDATE bets SET ${sets.join(", ")} WHERE id = $${valores.length}`,
+    valores
+  );
+}
+
 /** Port de update_status() — usado pela rota PATCH /api/bets/:id. */
 export async function updateStatus(id: number, status: BetStatus): Promise<void> {
   await getPool().query("UPDATE bets SET status = $1 WHERE id = $2", [status, id]);

@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Bet, BetStatus, ResultadoAposta } from "@/lib/types";
 import { RESULTADO_LABEL, STATUS_LABEL } from "@/lib/labels";
 import { BookmakerButtons } from "./BookmakerButtons";
-import { StatusResultEditor } from "./StatusResultEditor";
+import { EditarApostaDialog } from "./EditarApostaDialog";
 import { AlertIcon, CheckIcon, CoinIcon, DotIcon, HourglassIcon, MinusIcon, PencilIcon, XIcon } from "./icons";
 import styles from "./BetCard.module.css";
 
@@ -82,13 +82,13 @@ function formatarPlacar(placar: string): string {
 
 export function BetCard({
   bet,
-  onUpdate,
+  onRecarregar,
 }: {
   bet: Bet;
-  onUpdate: (id: number, patch: { status?: BetStatus; resultado?: ResultadoAposta }) => Promise<void>;
+  /** Chamado depois de salvar uma edição — a página refaz o fetch. */
+  onRecarregar: () => void;
 }) {
   const [editando, setEditando] = useState(false);
-  const [salvando, setSalvando] = useState(false);
 
   const temPlacarAoVivo = bet.status === "ao_vivo" && Boolean(bet.placar_final);
   // Vencedor OU placar já bastam pra mostrar a área de resultado. Exigir
@@ -99,24 +99,6 @@ export function BetCard({
   const temResultadoFinal =
     bet.status === "encerrada" && Boolean(bet.placar_final || bet.vencedor_partida);
   const corResultado = COR_RESULTADO[bet.resultado];
-
-  async function handleChangeStatus(novo: BetStatus) {
-    setSalvando(true);
-    try {
-      await onUpdate(bet.id, { status: novo });
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  async function handleChangeResultado(novo: ResultadoAposta) {
-    setSalvando(true);
-    try {
-      await onUpdate(bet.id, { resultado: novo });
-    } finally {
-      setSalvando(false);
-    }
-  }
 
   return (
     // O wrapper é o item do grid (que usa grid-auto-rows: 1fr, ver
@@ -161,11 +143,11 @@ export function BetCard({
             </span>
             <button
               className={styles.editButton}
-              onClick={() => setEditando((v) => !v)}
-              aria-label={editando ? "Fechar edição" : "Editar status/resultado"}
-              title={editando ? "Fechar edição" : "Editar status/resultado"}
+              onClick={() => setEditando(true)}
+              aria-label="Editar aposta"
+              title="Editar aposta"
             >
-              {editando ? <XIcon size={14} /> : <PencilIcon size={14} />}
+              <PencilIcon size={14} />
             </button>
           </div>
         </div>
@@ -216,13 +198,20 @@ export function BetCard({
         <BookmakerButtons links={bet.links} />
       </div>
 
+      {/* O lápis abre a edição COMPLETA (era só status/resultado inline).
+          Corrigir um confronto errado, um horário ou uma odd exigia mexer
+          no banco à mão; agora quem vê o erro na tela conserta ali.
+
+          Montado só quando aberto: assim os campos do formulário nascem
+          com os valores atuais da aposta a cada vez, sem precisar
+          sincronizar estado num efeito (entre uma edição e outra o
+          score_updater pode ter mudado placar/status). */}
       {editando ? (
-        <StatusResultEditor
-          status={bet.status}
-          resultado={bet.resultado}
-          onChangeStatus={handleChangeStatus}
-          onChangeResultado={handleChangeResultado}
-          disabled={salvando}
+        <EditarApostaDialog
+          bet={bet}
+          aberto
+          onFechar={() => setEditando(false)}
+          onSalva={onRecarregar}
         />
       ) : null}
     </div>

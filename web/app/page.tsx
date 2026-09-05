@@ -13,7 +13,7 @@ import { agruparBets, contarPorGrupo, GRUPO_LABEL, GRUPO_VAZIO } from "@/lib/agr
 import { filtrarPorBusca } from "@/lib/busca";
 import { calcularEstatisticas, calcularOddMedia, calcularSeries } from "@/lib/estatisticas";
 import { PRIORIDADE_STATUS } from "@/lib/labels";
-import { STATUS_VISIVEIS, type Bet, type BetStatus, type ResultadoAposta } from "@/lib/types";
+import { STATUS_VISIVEIS, type Bet } from "@/lib/types";
 import styles from "./page.module.css";
 
 // "Hoje" no filtro padrão precisa ser o dia no horário de Brasília, não em
@@ -108,24 +108,13 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro.status.join(","), filtro.from, filtro.to]);
 
-  const handleUpdateBet = useCallback(
-    async (id: number, patch: { status?: BetStatus; resultado?: ResultadoAposta }) => {
-      const resp = await fetch(`/api/bets/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      if (!resp.ok) {
-        setErro("Falha ao salvar a alteração.");
-        return;
-      }
-      // Refetch simples (mesmo espírito do st.rerun() original) — o
-      // conjunto de dados é pequeno o suficiente pra isso não ser um
-      // problema de performance real.
-      await buscarBets(filtro);
-    },
-    [buscarBets, filtro]
-  );
+  // Refetch simples (mesmo espírito do st.rerun() original) — o conjunto
+  // de dados é pequeno o suficiente pra isso não ser um problema de
+  // performance real. Quem grava é o próprio diálogo de edição, via
+  // PATCH; aqui só recarregamos a lista depois.
+  const handleRecarregar = useCallback(() => {
+    void buscarBets(filtro);
+  }, [buscarBets, filtro]);
 
   const apostasOrdenadas = useMemo(() => {
     const semData = new Date(8640000000000000); // Date "máxima" — mesmo papel do datetime.max do original
@@ -275,7 +264,7 @@ export default function Home() {
             ) : (
               <div className={styles.cardsGrid}>
                 {grupo.apostas.map((bet) => (
-                  <BetCard key={bet.id} bet={bet} onUpdate={handleUpdateBet} />
+                  <BetCard key={bet.id} bet={bet} onRecarregar={handleRecarregar} />
                 ))}
               </div>
             )}
