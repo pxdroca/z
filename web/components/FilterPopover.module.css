@@ -112,6 +112,7 @@
 /* Chip de status: quando ativo ganha só uma superfície levemente mais
    clara + borda de acento, nunca um fundo colorido cheio. */
 .statusChip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -136,11 +137,33 @@
   color: var(--text);
 }
 
+/* O checkbox some: o CHIP já é o controle e já mostra o estado (fundo e
+   texto mudam quando ativo). Ter os dois era redundante — e o quadrado
+   nativo do sistema dentro de uma cápsula de vidro era justamente o que
+   destoava. Continua no DOM (não `display: none`) pra seguir acessível
+   ao teclado e a leitores de tela. */
 .statusChip input {
-  width: 0.85rem;
-  height: 0.85rem;
-  accent-color: var(--accent);
-  cursor: pointer;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Ponto no lugar do check: marca o chip ativo sem ocupar espaço. */
+.statusChipAtivo::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* Foco de teclado no chip inteiro, já que o input está oculto. */
+.statusChip:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .dateRow {

@@ -201,6 +201,79 @@ select {
   font-family: inherit;
 }
 
+/* --- Controles nativos ------------------------------------------------
+   select, checkbox e input[type=date] são desenhados pelo SISTEMA, não
+   pelo CSS da página: sem os resets abaixo eles apareciam com o chrome
+   do Windows (seta cinza em caixa 3D, quadrado azul de marcação, ícone
+   de calendário claro) no meio de uma interface escura de vidro.
+
+   O `appearance: none` tira o desenho nativo; o resto reconstrói o
+   controle com os tokens da interface. */
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  /* Seta própria em SVG (data URI, sem requisição), na cor do texto
+     secundário. O padding-right abre espaço pra ela. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23a1a7b3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  padding-right: 2.2rem !important;
+  cursor: pointer;
+}
+
+/* A LISTA aberta do select é desenhada pelo sistema operacional e não
+   aceita CSS — o máximo que dá pra fazer é pedir o tema escuro, o que
+   já evita o painel branco sobre a interface escura. */
+select option {
+  background: #16191d;
+  color: var(--text);
+}
+
+/* Checkbox: caixa própria com o mesmo raio e borda dos outros campos, e
+   o check desenhado em SVG quando marcada. */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-strong);
+  border-radius: 0.3rem;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+input[type="checkbox"]:hover {
+  border-color: var(--accent);
+}
+
+input[type="checkbox"]:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='9' viewBox='0 0 11 9' fill='none'%3E%3Cpath d='M1 4.5L4 7.5L10 1.5' stroke='%230d0f11' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* O ícone de calendário do input[type=date] vem claro e destoa. Como não
+   dá pra trocar o desenho, ele é invertido pro tom da interface e ganha
+   área de clique confortável. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.65);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s var(--ease);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
 /* Foco visível e consistente em toda a interface (acessibilidade de
    teclado) — some no clique de mouse graças a :focus-visible. */
 :focus-visible {
