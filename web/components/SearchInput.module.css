@@ -15,7 +15,12 @@
   border: 1px solid var(--glass-border);
   border-top-color: var(--glass-top);
   border-radius: var(--radius);
-  transition: width 0.28s var(--ease), background-color 0.18s var(--ease), border-color 0.18s var(--ease);
+  /* --ease é ease-out expo: 90% do caminho no primeiro terço do tempo.
+     Ótimo pra entrada, mas no FECHAMENTO ele arranca e freia longe do
+     fim, o que lê como corte seco. Uma curva simétrica (ease-in-out
+     suave) fecha melhor; a abertura sobrescreve com --ease abaixo. */
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.18s var(--ease), border-color 0.18s var(--ease);
 }
 
 .wrapper:hover {
@@ -26,6 +31,11 @@
   width: 15rem;
   background: var(--glass-bg-hover);
   border-color: var(--glass-border-hover);
+  /* Abertura com --ease (expo): o campo salta pra frente e assenta, que
+     é a sensação de "abrir". O fechamento fica com a curva simétrica
+     definida em .wrapper. */
+  transition: width 0.32s var(--ease),
+    background-color 0.18s var(--ease), border-color 0.18s var(--ease);
 }
 
 /* A lupa fica ancorada à esquerda e não se move durante a animação — é o
@@ -126,6 +136,20 @@
     border-radius: var(--radius-full);
   }
 
+  /* Fechada: o mesmo alvo de 48px dos outros botões do dock. A lupa
+     acompanha, senão o ícone fica descentralizado no botão maior. */
+  .wrapper,
+  .lupa {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  /* Largura fixa (não flex): é ela que anima. Com `flex: 1 1 auto` o
+     campo passava a ser dimensionado pelo container e a transição de
+     `width` deixava de valer — a abertura virava um salto seco.
+
+     10.5rem é o que sobra ao lado dos 4 botões de 48px dentro do dock
+     esticado (100vw - 2rem). */
   .wrapperAberto {
     width: 10.5rem;
   }

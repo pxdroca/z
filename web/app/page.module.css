@@ -262,7 +262,11 @@
     bottom: calc(1.75rem + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
     z-index: 40;
-    width: auto;
+    /* Largura EXPLÍCITA (era `auto`): o CSS não interpola de `auto` para
+       um valor calculado, então a transição de width era ignorada e a
+       barra saltava ao abrir a busca. 5 elementos de 48px + 4 gaps de
+       6.4px + 16px de padding = 281.6px. */
+    width: 17.6rem;
     max-width: calc(100vw - 2rem);
     justify-content: center;
     /* Dock maior: os botões tinham 38px, abaixo dos 44px que a Apple
@@ -271,6 +275,12 @@
        respiro, a barra vai a ~64px de altura. */
     gap: 0.4rem;
     padding: 0.5rem;
+    /* A largura do dock acompanha a da busca ao abrir/fechar. Declarada
+       AQUI, na regra base, e não junto do :has() — quando o seletor que
+       casa muda, o navegador aplica a nova largura sem transição, e o
+       dock saltava de 284 pra 358px enquanto o campo crescia suave.
+       Curva simétrica no fechamento; a abertura sobrescreve com expo. */
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     /* Vidro GROSSO: blur alto + fundo bem mais opaco. O dock flutua SOBRE
        o conteúdo, então precisa escurecer e desfocar forte o que passa
        atrás — com o vidro fino dos cards, os cards apareciam através da
@@ -304,35 +314,39 @@
 
   /* Alvo de toque de 48px (era 38). Precisa alcançar tanto os botões
      diretos quanto os que vivem dentro de um wrapper (busca, Filtros) —
-     mesma razão do seletor descendente da regra de vidro acima. */
+     mesma razão do seletor descendente da regra de vidro acima.
+
+     A ALTURA vale pra todos; a LARGURA não pode valer pro wrapper da
+     busca, que é justamente o que anima ao abrir (a largura dele vem do
+     SearchInput.module.css). Fixar 3rem aqui vencia a transição e a
+     abertura virava um salto seco. */
   .headerAcoes button,
   .headerAcoes > div,
   .headerAcoes > div > button {
-    width: 3rem;
     height: 3rem;
   }
 
-  /* A busca ABERTA vira um campo de texto largo — largura fixa a
-     espremeria, então volta a ser automática.
-
-     E o dock inteiro passa a ocupar a largura da tela nesse estado: com
-     botões de 48px, o campo de busca mais os outros 4 ícones não cabiam
-     em 390px e o botão de Filtros era empurrado pra fora (medido: dock
-     de 358px, o último ícone cortado). Ocupando a largura toda, o campo
-     encolhe o necessário e todos continuam alcançáveis. */
-  .headerAcoes > div[class*="wrapperAberto"],
-  .headerAcoes > div[class*="wrapperAberto"] input {
-    width: auto;
-    min-width: 0;
+  .headerAcoes button,
+  .headerAcoes > div > button,
+  .headerAcoes > div:not([class*="wrapper"]) {
+    width: 3rem;
   }
 
+  /* Fechada, a busca é um botão redondo como os outros. */
+  .headerAcoes > div[class*="wrapper"]:not([class*="wrapperAberto"]) {
+    width: 3rem;
+  }
+
+  /* Com a busca aberta o dock ocupa a largura da tela: o campo mais os 4
+     ícones de 48px não cabiam nos 284px da barra fechada, e o botão de
+     Filtros era empurrado pra fora (medido: último ícone cortado). */
   .headerAcoes:has(div[class*="wrapperAberto"]) {
     width: calc(100vw - 2rem);
     justify-content: space-between;
   }
 
-  .headerAcoes:has(div[class*="wrapperAberto"]) > div[class*="wrapperAberto"] {
-    flex: 1 1 auto;
+  .headerAcoes:has(div[class*="wrapperAberto"]) {
+    transition: width 0.32s var(--ease);
   }
 
   /* Ícones proporcionalmente maiores: com 15px num botão de 48 eles
