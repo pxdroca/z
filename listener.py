@@ -80,7 +80,7 @@ from database import (
     update_resultado,
 )
 from extractor import detectar_aviso_cashout, extract_bet_info
-from matcher import build_enabled_adapters, find_match
+from matcher import build_enabled_adapters, find_match, horario_da_primeira_selecao
 from models import Bet, BetStatus, Esporte, ExtractedBet, MatchInfo, ResultadoAposta, TipoAposta
 from nameutils import names_match
 from notifier import send_bet_notification, send_plain_message
@@ -413,11 +413,34 @@ async def process_message(message: Message) -> None:
             }
             for adapter in build_enabled_adapters()
         }
+        # O mercado que o extractor leu do print vem PRIMEIRO. Antes o
+        # rótulo era sempre "Múltipla (N seleções)", que descarta uma
+        # informação que costuma estar bem visível no print — numa múltipla
+        # de 2 pernas dá pra ler o mercado sem esforço. O genérico fica só
+        # como fallback, pra quando o print não deixa claro.
+        mercado_multipla = extracted.mercado or (
+            "Múltipla" + (f" ({len(extracted.selecoes)} seleções)" if extracted.selecoes else "")
+        )
+
+        # Horário: o do PRIMEIRO jogo da múltipla. Sem isso ela nasce sem
+        # data_hora e cai na seção "horário não encontrado" da imagem, além
+        # de não ter onde ser ordenada no painel. Ver
+        # matcher.horario_da_primeira_selecao.
+        data_hora_multipla = await asyncio.to_thread(
+            partial(
+                horario_da_primeira_selecao,
+                extracted.selecoes,
+                extracted.esporte,
+                referencia=message.date,
+            )
+        )
+
         bet = Bet(
             jogador1=", ".join(extracted.selecoes) if extracted.selecoes else "Múltipla (ver print original)",
             jogador2="",
-            mercado="Múltipla" + (f" ({len(extracted.selecoes)} seleções)" if extracted.selecoes else ""),
+            mercado=mercado_multipla,
             odd=extracted.odd,
+            data_hora=data_hora_multipla,
             links=links,
             status=BetStatus.AGENDADA.value,
             fonte_texto=extracted.texto_bruto,
@@ -604,16 +627,28 @@ async def _poll_chat(client: TelegramClient, chat) -> None:
         len(mensagens), getattr(chat, "title", ""), min_id,
     )
 
+    # Ponteiro gravado A CADA mensagem, não só no fim do loop.
+    #
+    # Bug real (05/09/2026): no primeiro poll de um grupo novo a janela de
+    # 30h traz dezenas de mensagens, cada uma passando por OCR/LLM. O
+    # workflow tem `timeout-minutes: 4` — quando estourava no meio, o
+    # ponteiro nunca era gravado e o poll seguinte recomeçava do zero,
+    # reprocessando as mesmas mensagens. O resultado era "uma aposta de
+    # cada vez, muito devagar", que foi exatamente o sintoma observado.
+    #
+    # Gravando a cada mensagem, um ciclo interrompido não perde o
+    # progresso: o próximo continua de onde parou. As mensagens são
+    # processadas em ordem crescente de id (ver reverse() acima), então o
+    # ponteiro nunca pula uma mensagem não processada.
     maior_id = min_id
     for message in mensagens:
         try:
             await process_message(message)
         except Exception:
             logger.exception("Erro ao processar mensagem %s", message.id)
-        maior_id = max(maior_id, message.id)
-
-    if maior_id != min_id:
-        set_sync_state(sync_key, str(maior_id))
+        if message.id > maior_id:
+            maior_id = message.id
+            set_sync_state(sync_key, str(maior_id))
 
 
 def main() -> None:

@@ -25,7 +25,15 @@ on:
 jobs:
   poll:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    # 8 min, não 4: no primeiro poll de um grupo novo a janela de 30h traz
+    # dezenas de mensagens, cada uma passando por OCR/LLM. Medido em
+    # 05/09/2026: três polls seguidos foram CANCELADOS aos ~259s (o teto
+    # de 4 min), enquanto os polls de rotina levavam ~125s.
+    #
+    # O ponteiro agora é gravado a cada mensagem (ver listener._poll_chat),
+    # então um ciclo interrompido não perde mais o progresso — mas dar
+    # margem evita ficar cancelando no meio de um lote grande.
+    timeout-minutes: 8
     steps:
       - name: Checkout
         uses: actions/checkout@v4

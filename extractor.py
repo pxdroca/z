@@ -151,6 +151,15 @@ exato:
   // A ODD também identifica o lado: num card com "1  1.33" e "2  3.30", a
   // odd 3.30 da legenda é a do jogador da coluna 2. Use isso pra confirmar
   // em qual dos dois a aposta foi feita.
+  //
+  // EM MÚLTIPLA o "mercado" também deve ser preenchido: o print quase
+  // sempre mostra o mercado de cada perna ("Vencedor da partida",
+  // "Vencer um set"...). Se TODAS as pernas têm o mesmo mercado, escreva
+  // esse mercado ("Vencedor da partida"); se forem diferentes, junte com
+  // barra ("Vencedor da partida / Vencer um set"). Só deixe null se o
+  // print realmente não mostrar nenhum mercado — um rótulo genérico do
+  // tipo "Múltipla (2 seleções)" não diz nada que a lista de seleções já
+  // não diga, e a informação está bem visível no print.
   "mercado": "mercado da aposta (ou null só se genuinamente não der pra inferir)",
 
   // Preencha isto SE tipo_aposta == "multipla" (senão deixe null/[]):
@@ -1239,26 +1248,27 @@ def _groq_cabe_no_limite(image_path: Optional[str]) -> bool:
 
 
 def _extrair_com_fallbacks(image_path: Optional[str], caption_text: str) -> ExtractedBet:
-    """Cadeia quando o Gemini falha: Groq -> OpenRouter -> EasyOCR -> texto.
+    """Cadeia quando o Gemini falha: OpenRouter -> Groq -> EasyOCR -> texto.
 
     Os dois LLMs vêm antes do EasyOCR porque entendem o print como a tip
     que ele é (qual dos dois jogadores é o da aposta, múltipla vs
     simples); o EasyOCR lê o print como texto cru e o parser de regex
     tenta adivinhar o resto.
 
-    A ordem entre eles é por custo de espera, não por qualidade: o Groq é
-    muito mais rápido, mas só aceita tip de TEXTO (o tier grátis dele
-    limita a 7k tokens de entrada por minuto e um print passa disso — ver
-    _groq_cabe_no_limite). Quando há print, quem atende é o OpenRouter,
-    cujo free tier não tem teto de tokens por minuto.
+    OpenRouter primeiro porque atende os DOIS casos (texto e print), com
+    modelos de visão de 262k-1M de contexto. O Groq é mais rápido, mas o
+    tier grátis dele limita a 7k tokens de entrada por minuto e um print
+    passa disso (ver _groq_cabe_no_limite) — como segunda opção ele cobre
+    a tip de texto quando o OpenRouter falha ou estoura as 50
+    requisições/dia.
 
     Nenhuma etapa levanta pro chamador: o que falha vira log e passa a vez.
     """
     tentativas: list[tuple[str, str, object]] = []
-    if settings.GROQ_API_KEY and _groq_cabe_no_limite(image_path):
-        tentativas.append(("Groq", settings.GROQ_MODEL, extract_with_groq))
     if settings.OPENROUTER_API_KEY:
         tentativas.append(("OpenRouter", settings.OPENROUTER_MODEL, extract_with_openrouter))
+    if settings.GROQ_API_KEY and _groq_cabe_no_limite(image_path):
+        tentativas.append(("Groq", settings.GROQ_MODEL, extract_with_groq))
 
     for rotulo, modelo, funcao in tentativas:
         try:

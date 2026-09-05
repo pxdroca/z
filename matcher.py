@@ -360,6 +360,53 @@ def _confronto_de_aposta_anterior(
     return None
 
 
+def horario_da_primeira_selecao(
+    selecoes: Optional[list],
+    esporte: str = Esporte.TENIS.value,
+    referencia: Optional[datetime] = None,
+) -> Optional[datetime]:
+    """Horário do jogo mais cedo entre as seleções de uma múltipla.
+
+    A múltipla não tem um confronto único, então nunca ganhava data_hora —
+    e sem ela a aposta cai na seção "horário não encontrado" da imagem e
+    não tem por onde ser ordenada no painel. O horário útil é o da
+    PRIMEIRA perna a começar: é quando a múltipla passa a valer.
+
+    Procura cada seleção como "só o favorito" (é o que o print dá: um nome
+    por perna), e devolve o menor horário achado. Seleção que nenhuma
+    fonte reconhece é ignorada — meia informação é melhor que nenhuma.
+
+    Best-effort de propósito: nunca levanta, e devolve None se não achar
+    nada (aí a múltipla segue como era antes).
+    """
+    if not selecoes:
+        return None
+
+    horarios: list[datetime] = []
+    for nome in selecoes:
+        if not nome:
+            continue
+        try:
+            canonico = _confronto_de_aposta_anterior(nome, esporte, referencia)
+            if canonico is None:
+                canonico = find_canonical_match_by_name(
+                    nome, esporte=esporte, referencia=referencia
+                )
+        except Exception:
+            logger.exception("Múltipla: falha ao buscar o horário de %r — ignorando essa perna.", nome)
+            continue
+
+        if canonico and canonico.data_hora:
+            logger.info("Múltipla: %r joga %s", nome, canonico.data_hora.isoformat())
+            horarios.append(canonico.data_hora)
+
+    if not horarios:
+        logger.info("Múltipla: nenhuma seleção teve horário confirmado (%s).", selecoes)
+        return None
+
+    return min(horarios)
+
+
 def _completar_event_id(
     canonico: CanonicalMatch,
     esporte: str,

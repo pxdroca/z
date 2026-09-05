@@ -18,7 +18,11 @@
 // Nenhum dado é filtrado aqui: toda aposta cai em exatamente um grupo.
 import type { Bet } from "./types";
 
-export const GRUPOS = ["ao_vivo", "green", "red", "pendentes", "void"] as const;
+// Ordem de exibição no painel: primeiro o que ainda está em jogo (ao vivo,
+// depois pendente — o que exige atenção agora), e só então o que já foi
+// decidido (green, red, void). Antes green/red vinham antes de pendentes,
+// o que empurrava as apostas ainda abertas pro meio da tela.
+export const GRUPOS = ["ao_vivo", "pendentes", "green", "red", "void"] as const;
 export type GrupoId = (typeof GRUPOS)[number];
 
 export const GRUPO_LABEL: Record<GrupoId, string> = {
