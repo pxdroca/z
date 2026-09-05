@@ -28,5 +28,16 @@ export default function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Arquivos estáticos ficam de fora da checagem de senha.
+  //
+  // A extensão no fim é o que libera o conteúdo de public/: sem isso
+  // /tipster.jpg levava 307 pro /login, e a foto do tipster não aparecia
+  // justamente NA tela de login (a página que a exibe). Vale também pros
+  // ícones que o Next gera por convenção (icon.png, apple-icon.png).
+  //
+  // Não é um vazamento: são imagens de marca, não dado de aposta — e
+  // qualquer rota de dados (/api/*) segue protegida.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|avif)$).*)",
+  ],
 };

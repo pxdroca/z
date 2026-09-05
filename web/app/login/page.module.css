@@ -6,6 +6,28 @@
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
+  overflow: hidden;
+}
+
+/* Brilho ambiente atrás do card: um halo largo no verde da marca, bem
+   diluído. Sem ele o fundo era grafite chapado e o card flutuava no
+   vazio — o painel tem o mesmo tipo de luz de fundo. */
+.container::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(46rem, 130vw);
+  height: min(46rem, 130vw);
+  transform: translate(-50%, -60%);
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(215, 242, 77, 0.055),
+    rgba(215, 242, 77, 0.018) 42%,
+    transparent 68%
+  );
+  z-index: 0;
 }
 
 @keyframes card-rise {
@@ -19,17 +41,68 @@
   }
 }
 
+/* Mesmo material dos painéis flutuantes (dock, modais): vidro GROSSO,
+   borda translúcida com o topo iluminado e sombra funda. Antes o card
+   tinha fundo/borda/sombra próprios (rgba fixo + --border-strong +
+   --shadow-lg) e destoava do resto da interface. */
 .card {
+  position: relative;
   width: 100%;
   max-width: 24rem;
-  background: rgba(21, 24, 28, 0.92);
-  backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur));
-  border: 1px solid var(--border-strong);
+  background: var(--glass-thick-bg);
+  backdrop-filter: blur(var(--glass-thick-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-thick-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border-hover);
+  border-top-color: var(--glass-top);
   border-radius: var(--radius-lg);
   padding: 2.25rem 2rem;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), var(--glass-inset);
+  overflow: hidden;
   animation: card-rise 0.3s var(--ease);
+}
+
+/* Luz difusa na quina superior esquerda, no verde-limão da marca — a
+   mesma linguagem dos blocos da imagem-resumo e dos cards do painel. */
+.card::before {
+  content: "";
+  position: absolute;
+  top: -5rem;
+  left: -5rem;
+  width: 13rem;
+  height: 13rem;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(215, 242, 77, 0.11), transparent 58%);
+  filter: blur(12px);
+  z-index: 0;
+}
+
+/* Moldura de 1.5px recortada por mask: a luz entortando na aresta, mais
+   forte nas quinas. Precisa de elemento próprio porque `mask` recorta
+   todo o background da camada (mesma razão do .lensing do BetCard). */
+.lensing {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.22),
+    rgba(255, 255, 255, 0.02) 30%,
+    rgba(255, 255, 255, 0.02) 68%,
+    rgba(255, 255, 255, 0.12)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  z-index: 0;
+}
+
+/* Conteúdo acima das camadas de luz. */
+.card > *:not(.lensing) {
+  position: relative;
+  z-index: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -42,9 +115,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  margin-bottom: 0.4rem;
-  color: var(--accent);
+  margin-bottom: 0.9rem;
+}
+
+/* Foto do tipster: círculo com anel no verde da marca e um halo suave,
+   pra ela ler como identidade do grupo e não como imagem solta. */
+.avatar {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(215, 242, 77, 0.55);
+  box-shadow: 0 0 0 5px rgba(215, 242, 77, 0.07), 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .titulo {

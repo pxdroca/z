@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertIcon, HourglassIcon, LockIcon, TrophyIcon } from "@/components/icons";
+import Image from "next/image";
+import { AlertIcon, HourglassIcon, LockIcon } from "@/components/icons";
 import styles from "./page.module.css";
 
 export default function LoginPage() {
@@ -36,8 +37,27 @@ export default function LoginPage() {
   return (
     <div className={styles.container}>
       <form className={styles.card} onSubmit={handleSubmit}>
+        {/* Lensing de borda, como nos cards do painel — é o que dá a
+            leitura de peça de vidro em vez de retângulo translúcido. */}
+        <span className={styles.lensing} aria-hidden="true" />
+
+        {/* A foto do tipster no lugar do troféu genérico: é a marca real
+            do grupo, e a mesma imagem que virou o ícone da aba. */}
         <div className={styles.marca}>
-          <TrophyIcon color="var(--accent)" size={20} />
+          {/* unoptimized: o otimizador do Next recusa a largura que este
+              avatar pede (400 em /_next/image?w=96) porque 96 não está
+              na lista de tamanhos gerados. Para uma imagem pequena, de
+              tamanho fixo e servida do próprio domínio, otimizar não
+              traria ganho — só a requisição extra que estava falhando. */}
+          <Image
+            className={styles.avatar}
+            src="/tipster.jpg"
+            alt=""
+            width={72}
+            height={72}
+            unoptimized
+            priority
+          />
         </div>
         <div className={styles.titulo}>Cansadão Apostas</div>
         <div className={styles.subtitulo}>Entre com sua senha para continuar</div>
