@@ -256,7 +256,10 @@
   .headerAcoes {
     position: fixed;
     left: 50%;
-    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    /* Mais afastado da base (era 1rem): no iPhone a barra de gestos fica
+       logo abaixo, e o dock colado nela parecia parte do sistema em vez
+       de um elemento do app. */
+    bottom: calc(1.75rem + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
     z-index: 40;
     width: auto;
@@ -359,8 +362,8 @@
   .container {
     padding: 1.25rem 1rem 3rem;
     /* Espaço pro dock flutuante não cobrir o último card — acompanha a
-       altura da barra (subiu de 52 pra ~64px). */
-    padding-bottom: 7.25rem;
+       altura da barra (~66px) e o afastamento dela da base (1.75rem). */
+    padding-bottom: 8rem;
   }
   .appHeader {
     font-size: 1.4rem;

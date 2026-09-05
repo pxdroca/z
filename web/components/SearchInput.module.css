@@ -118,6 +118,14 @@
    Um width:100% aqui esticaria a barra inteira e empurraria os outros
    botões pra fora — então volta a uma largura fixa que caiba no dock. */
 @media (max-width: 640px) {
+  .wrapper,
+  .wrapperAberto {
+    /* Pílula, como o dock. Com --radius (retangular arredondado) o campo
+       destoava da barra que o contém: cápsula dentro de cápsula pede a
+       mesma família de curva. */
+    border-radius: var(--radius-full);
+  }
+
   .wrapperAberto {
     width: 10.5rem;
   }
