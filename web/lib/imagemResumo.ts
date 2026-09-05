@@ -10,16 +10,15 @@ import type { Bet } from "./types";
 const FUSO_PADRAO = "America/Sao_Paulo";
 
 /**
- * Idade máxima de uma aposta SEM horário confirmado para ela entrar no
- * resumo do dia.
+ * Quanto ANTES da virada do dia uma tip sem horário ainda conta como
+ * sendo daquele dia.
  *
- * 24h: cobre a tip que o tipster manda de madrugada para o jogo do dia
- * seguinte (as de 04/09 foram lançadas 23:28 e 23:42 de 03/09, hora de
- * Brasília) sem alcançar aposta antiga que segue em aberto — a múltipla
- * de odd 129 de 03/09, por exemplo, que sem esse teto aparecia no resumo
- * de 04/09 como "pendente".
+ * A aposta sem `data_hora` pertence ao dia em que foi enviada, mas o
+ * tipster manda as bets da madrugada na véspera (as de 04/09 saíram
+ * 23:28 e 23:42 de 03/09, hora de Brasília). Esta folga cobre esse
+ * padrão sem puxar a tip de dois dias atrás.
  */
-const JANELA_SEM_HORARIO = 24 * 60 * 60 * 1000;
+const JANELA_SEM_HORARIO = 6 * 60 * 60 * 1000;
 
 /** "Hoje" no fuso de Brasília — mesmo critério usado no filtro padrão do
  *  painel (app/page.tsx), pra bater com o que o usuário já vê como "hoje". */
@@ -66,19 +65,61 @@ export function jogosDeHoje(bets: Bet[]): Bet[] {
     day: "2-digit",
   }).format(new Date());
 
-  const agora = Date.now();
+  // Que dia a imagem está retratando? Normalmente hoje — mas quando a
+  // lista recebida (já filtrada pelo painel) é de OUTRO dia, é esse dia
+  // que vale. Sem isso, filtrar o painel por 05/09 às 22h de 04/09
+  // gerava uma imagem vazia: a função recalculava "hoje" e descartava
+  // tudo que o usuário tinha acabado de selecionar.
+  const diasComJogo = new Set(
+    bets.filter((b) => b.data_hora).map((b) => diaNoFuso(b.data_hora!, FUSO_PADRAO)),
+  );
+  const diaAlvo = diasComJogo.has(hoje)
+    ? hoje
+    // Sem jogo hoje na lista: usa o dia mais frequente entre os que há.
+    : [...diasComJogo].sort()[0] ?? hoje;
 
   const doDia = bets.filter((b) => {
-    if (b.data_hora) return diaNoFuso(b.data_hora, FUSO_PADRAO) === hoje;
+    if (b.data_hora) return diaNoFuso(b.data_hora, FUSO_PADRAO) === diaAlvo;
     if (!b.criado_em) return false;
-    // Sem horário confirmado: vale pela idade da aposta.
-    return agora - new Date(b.criado_em).getTime() <= JANELA_SEM_HORARIO;
+    // Sem horário confirmado, a aposta pertence ao dia em que foi
+    // ENVIADA — não a uma janela de horas a partir de agora.
+    //
+    // A janela deslizante fazia toda aposta sem horário reaparecer no
+    // resumo do dia seguinte enquanto estivesse dentro das 24h, e é o que
+    // enchia a seção "horário não encontrado" com jogos de dias
+    // diferentes. Ancorar no dia de envio resolve: a tip de madrugada
+    // (mandada 23:28 de 03/09 para o jogo de 04/09) continua entrando no
+    // dia certo por causa da tolerância abaixo.
+    const criadoEm = new Date(b.criado_em);
+    if (diaNoFuso(b.criado_em, FUSO_PADRAO) === diaAlvo) return true;
+    // Tolerância: tip mandada na véspera, perto da virada, é do dia
+    // seguinte (o tipster manda as bets de madrugada por volta das 23h).
+    const inicioDoDia = new Date(`${diaAlvo}T00:00:00-03:00`).getTime();
+    const antes = inicioDoDia - criadoEm.getTime();
+    return antes > 0 && antes <= JANELA_SEM_HORARIO;
   });
 
   const instante = (b: Bet): number =>
     b.data_hora ? new Date(b.data_hora).getTime() : Number.POSITIVE_INFINITY;
 
   return doDia.slice().sort((a, b) => instante(a) - instante(b));
+}
+
+/** Qual dia a imagem está retratando (YYYY-MM-DD no fuso de Brasília).
+ *  Mesmo critério de jogosDeHoje — o cabeçalho tem que mostrar a data do
+ *  conteúdo, não "hoje": filtrando o painel por 05/09 às 22h de 04/09, o
+ *  título dizia "04 DE SET" com jogos de 05. */
+export function diaRetratado(bets: Bet[]): string {
+  const hoje = new Intl.DateTimeFormat("en-CA", {
+    timeZone: FUSO_PADRAO,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const dias = new Set(
+    bets.filter((b) => b.data_hora).map((b) => diaNoFuso(b.data_hora!, FUSO_PADRAO)),
+  );
+  return dias.has(hoje) ? hoje : [...dias].sort()[0] ?? hoje;
 }
 
 function formatarHora(iso: string): string {
@@ -926,12 +967,16 @@ export function desenharResumoDoDia(bets: Bet[]): HTMLCanvasElement {
   // "04 SET · QUINTA-FEIRA": data curta e dia da semana em caixa alta,
   // que situa o resumo sem gastar a linha inteira com "de setembro de".
   const agora = new Date();
+  // A data do cabeçalho é a do DIA RETRATADO, não a de hoje: com o painel
+  // filtrado por outro dia, o título mostrava "04 DE SET" acima de jogos
+  // de 05. O "T12:00" evita que o fuso jogue a data pro dia anterior.
+  const dataDoResumo = new Date(`${diaRetratado(jogos)}T12:00:00-03:00`);
   const diaMes = new Intl.DateTimeFormat("pt-BR", {
     timeZone: FUSO_PADRAO, day: "2-digit", month: "short",
-  }).format(agora).replace(".", "").toUpperCase();
+  }).format(dataDoResumo).replace(".", "").toUpperCase();
   const diaSemana = new Intl.DateTimeFormat("pt-BR", {
     timeZone: FUSO_PADRAO, weekday: "long",
-  }).format(agora).toUpperCase();
+  }).format(dataDoResumo).toUpperCase();
 
   ctx.fillStyle = "#d7f24d";
   ctx.font = "700 30px Inter, sans-serif";
