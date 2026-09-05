@@ -86,8 +86,14 @@ export interface ListBetsFiltro {
 /**
  * Port de list_bets() — mas filtrando por vários status numa query só
  * (status IN (...)) em vez de N queries deduplicadas no cliente, como o
- * app.py fazia (ver plano de migração). data_hora NULL sempre passa no
- * filtro de data, mesmo comportamento do original.
+ * app.py fazia (ver plano de migração).
+ *
+ * Aposta SEM data_hora é filtrada pelo dia em que foi ENVIADA. Antes ela
+ * passava por qualquer filtro de data (`data_hora IS NULL OR ...`,
+ * herdado do Streamlit), então filtrar por 05/09 ainda trazia a múltipla
+ * de 03/09 e o Trotter de ontem — apostas de outros dias entulhando a
+ * tela. É a mesma regra que a imagem-resumo já usa (ver
+ * lib/imagemResumo.ts).
  */
 export async function listBets(filtro: ListBetsFiltro): Promise<Bet[]> {
   const pool = getPool();
@@ -98,13 +104,33 @@ export async function listBets(filtro: ListBetsFiltro): Promise<Bet[]> {
     params.push(filtro.status);
     condicoes.push(`status = ANY($${params.length}::text[])`);
   }
+
+  // As datas do filtro são dias de Brasília; as colunas são timestamptz.
+  // O AT TIME ZONE converte antes de comparar — sem isso, um jogo das 22h
+  // de Brasília (01h UTC do dia seguinte) cairia no dia errado.
+  //
+  // A tolerância de 6h no `criado_em` cobre a tip mandada na véspera para
+  // o jogo da madrugada, que é o padrão do tipster (as bets de 04/09
+  // saíram 23:28 e 23:42 de 03/09).
   if (filtro.dateFrom) {
     params.push(filtro.dateFrom);
-    condicoes.push(`(data_hora IS NULL OR date(data_hora) >= date($${params.length}))`);
+    const p = `$${params.length}`;
+    condicoes.push(`(
+      CASE WHEN data_hora IS NOT NULL
+        THEN (data_hora AT TIME ZONE 'America/Sao_Paulo')::date >= ${p}::date
+        ELSE (criado_em AT TIME ZONE 'America/Sao_Paulo' + interval '6 hours')::date >= ${p}::date
+      END
+    )`);
   }
   if (filtro.dateTo) {
     params.push(filtro.dateTo);
-    condicoes.push(`(data_hora IS NULL OR date(data_hora) <= date($${params.length}))`);
+    const p = `$${params.length}`;
+    condicoes.push(`(
+      CASE WHEN data_hora IS NOT NULL
+        THEN (data_hora AT TIME ZONE 'America/Sao_Paulo')::date <= ${p}::date
+        ELSE (criado_em AT TIME ZONE 'America/Sao_Paulo' + interval '6 hours')::date <= ${p}::date
+      END
+    )`);
   }
 
   const query = `SELECT * FROM bets WHERE ${condicoes.join(" AND ")} ORDER BY data_hora ASC NULLS LAST`;
