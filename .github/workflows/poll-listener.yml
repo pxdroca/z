@@ -60,6 +60,10 @@ jobs:
           # extractor._extrair_com_fallbacks. Sem o secret, a cadeia segue
           # como antes (Gemini -> EasyOCR -> texto puro).
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # O backup que cobre PRINT (o Groq só dá conta de tip de texto —
+          # ver extractor._groq_cabe_no_limite).
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
           BOOKMAKERS: ${{ vars.BOOKMAKERS }}
           SUPERBET_BASE_URL: ${{ vars.SUPERBET_BASE_URL }}
           BETANO_BASE_URL: ${{ vars.BETANO_BASE_URL }}

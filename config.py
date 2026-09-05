@@ -104,6 +104,26 @@ class Settings:
     # workflow, e o EasyOCR ainda vem depois se isto também falhar.
     GROQ_TIMEOUT_S: int = field(default_factory=lambda: _get_int("GROQ_TIMEOUT_S", 45) or 45)
 
+    # --- OpenRouter: backup do Gemini que cobre PRINT ----------------------
+    # O Groq não serve pra imagem: o tier grátis dele limita a 7.000 tokens
+    # de ENTRADA por minuto e um print de tip sozinho passa disso. O
+    # OpenRouter não tem teto de tokens/minuto no free tier — são 20
+    # requisições/minuto e 50/dia, sem cartão — e os modelos gratuitos com
+    # visão têm contexto de 262k a 1M tokens (o maior print do histórico
+    # custa ~47k). Chave em https://openrouter.ai/keys
+    OPENROUTER_API_KEY: str = field(default_factory=lambda: os.getenv("OPENROUTER_API_KEY", "").strip())
+    # Gemma 4 31B: modelo de visão do Google servido de graça aqui, 262k de
+    # contexto. O catálogo gratuito do OpenRouter ROTACIONA (modelos viram
+    # pagos e outros entram), então se este sumir, GET /api/v1/models lista
+    # o que está livre — procure os ids terminados em ":free" que aceitam
+    # "image" em input_modalities.
+    OPENROUTER_MODEL: str = field(
+        default_factory=lambda: (os.getenv("OPENROUTER_MODEL", "").strip() or "google/gemma-4-31b-it:free")
+    )
+    # Mais folgado que o do Groq: modelo gratuito costuma ter fila, e aqui
+    # ele é a última chance antes do EasyOCR.
+    OPENROUTER_TIMEOUT_S: int = field(default_factory=lambda: _get_int("OPENROUTER_TIMEOUT_S", 70) or 70)
+
     # --- Banco de dados / mídia ---
     # Connection string do Postgres (Supabase) — usada tanto local quanto
     # em produção (GitHub Actions). Obrigatória: database.py não tem mais

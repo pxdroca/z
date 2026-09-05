@@ -400,36 +400,49 @@ def _bet_do_json_do_llm(
 
 
 # ==============================================================================
-# 2b) GROQ — segundo LLM, backup do Gemini
+# 2b) BACKUPS DO GEMINI — outros LLMs, mesma tarefa
 # ==============================================================================
 #
-# Existe porque o Gemini cai com 503 ("This model is currently experiencing
+# Existem porque o Gemini cai com 503 ("This model is currently experiencing
 # high demand") em rajadas, e nessas janelas a extração desabava pro parser
 # de regex, que lê muito menos — a tip nascia sem jogadores. O EasyOCR local
 # ajuda, mas lê o print como texto cru: não entende qual dos dois jogadores
 # é o da aposta, nem separa múltipla de simples.
 #
-# Groq e não outra chave do Gemini: o 503 é do modelo, não da conta, então
-# uma segunda chave Google não cobriria justamente o erro observado.
-# Provedor separado = falha independente.
+# Provedores separados e não outra chave do Gemini: o 503 é do MODELO, não
+# da conta, então uma segunda chave Google não cobriria justamente o erro
+# observado.
+#
+# Os três falam a mesma API (formato OpenAI de chat), então uma função só
+# atende a todos — muda a URL, a chave e o modelo.
 
-def extract_with_groq(image_path: Optional[str], caption_text: str) -> ExtractedBet:
-    """Mesma tarefa de extract_with_gemini, no Groq (API compatível com OpenAI).
+def _extrair_com_api_openai(
+    base_url: str,
+    api_key: str,
+    modelo: str,
+    timeout_s: int,
+    rotulo: str,
+    image_path: Optional[str],
+    caption_text: str,
+    headers_extra: Optional[dict] = None,
+) -> ExtractedBet:
+    """Extrai a tip por uma API no formato OpenAI de chat completions.
 
-    Usa o MESMO prompt e o mesmo parser de resposta (_bet_do_json_do_llm),
-    pra que trocar de provedor não mude o resultado — só quem atendeu.
+    Usa o MESMO prompt e o mesmo parser de resposta do Gemini
+    (_bet_do_json_do_llm), pra que trocar de provedor não mude o
+    resultado — só quem atendeu.
     """
     import base64
 
     import requests
 
-    if not settings.GROQ_API_KEY:
-        raise RuntimeError("GROQ_API_KEY não definido — sem backup do Gemini.")
+    if not api_key:
+        raise RuntimeError(f"{rotulo}: sem chave configurada.")
 
     prompt = _GEMINI_PROMPT.replace("{legenda}", caption_text or "(sem legenda)")
 
-    # Formato de mensagens da API de chat (compatível com OpenAI): o texto
-    # e a imagem vão como "partes" do mesmo turno do usuário.
+    # Formato de mensagens da API de chat: o texto e a imagem vão como
+    # "partes" do mesmo turno do usuário.
     partes: list = [{"type": "text", "text": prompt}]
     if image_path:
         with open(image_path, "rb") as f:
@@ -442,16 +455,20 @@ def extract_with_groq(image_path: Optional[str], caption_text: str) -> Extracted
     # — bloqueio por fingerprint, antes mesmo de olhar a chave. Testado ao
     # vivo em 04/09/2026: mesma requisição, urllib 403 e requests 200.
     # `requests` já é dependência transitiva do projeto.
+    headers = {"Authorization": f"Bearer {api_key}"}
+    if headers_extra:
+        headers.update(headers_extra)
+
     resp = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
+        f"{base_url.rstrip('/')}/chat/completions",
+        headers=headers,
         json={
-            "model": settings.GROQ_MODEL,
+            "model": modelo,
             "messages": [{"role": "user", "content": partes}],
             "response_format": {"type": "json_object"},
             "temperature": 0,
         },
-        timeout=settings.GROQ_TIMEOUT_S,
+        timeout=timeout_s,
     )
     resp.raise_for_status()
     resposta = resp.json()
@@ -460,10 +477,49 @@ def extract_with_groq(image_path: Optional[str], caption_text: str) -> Extracted
         texto = resposta["choices"][0]["message"]["content"]
         data = json.loads(texto)
     except (KeyError, IndexError, json.JSONDecodeError, TypeError):
-        logger.warning("Groq não devolveu JSON válido: %r", resposta)
+        logger.warning("%s não devolveu JSON válido: %r", rotulo, resposta)
         return ExtractedBet(texto_bruto=caption_text, confianca=0.0)
 
     return _bet_do_json_do_llm(data, caption_text, image_path)
+
+
+def extract_with_groq(image_path: Optional[str], caption_text: str) -> ExtractedBet:
+    """Backup no Groq. Rápido, mas o tier grátis limita a 7.000 tokens de
+    ENTRADA por minuto — um print de tip sozinho passa disso, então na
+    prática ele só atende tip de texto puro (ver _groq_cabe_no_limite)."""
+    return _extrair_com_api_openai(
+        "https://api.groq.com/openai/v1",
+        settings.GROQ_API_KEY,
+        settings.GROQ_MODEL,
+        settings.GROQ_TIMEOUT_S,
+        "Groq",
+        image_path,
+        caption_text,
+    )
+
+
+def extract_with_openrouter(image_path: Optional[str], caption_text: str) -> ExtractedBet:
+    """Backup no OpenRouter — o que cobre PRINT, que é o caso que importa.
+
+    Diferente do Groq, o tier grátis do OpenRouter não tem teto de tokens
+    por minuto: são 20 requisições/minuto e 50/dia (sem cartão), e os
+    modelos gratuitos com visão têm contexto de 262k a 1M tokens. O maior
+    print do histórico custa ~47k, então cabe com folga — era exatamente
+    esse teto que inutilizava o Groq para imagem.
+
+    Os headers HTTP-Referer/X-Title são opcionais na API e servem só pra
+    identificar a aplicação no painel do OpenRouter.
+    """
+    return _extrair_com_api_openai(
+        "https://openrouter.ai/api/v1",
+        settings.OPENROUTER_API_KEY,
+        settings.OPENROUTER_MODEL,
+        settings.OPENROUTER_TIMEOUT_S,
+        "OpenRouter",
+        image_path,
+        caption_text,
+        headers_extra={"X-Title": "tennis-bet-monitor"},
+    )
 
 
 # ==============================================================================
@@ -1183,25 +1239,36 @@ def _groq_cabe_no_limite(image_path: Optional[str]) -> bool:
 
 
 def _extrair_com_fallbacks(image_path: Optional[str], caption_text: str) -> ExtractedBet:
-    """Cadeia de fallback quando o Gemini falha: Groq -> EasyOCR -> texto puro.
+    """Cadeia quando o Gemini falha: Groq -> OpenRouter -> EasyOCR -> texto.
 
-    O Groq vem primeiro porque é outro LLM: entende o print como a tip que
-    ele é (qual dos dois jogadores é o da aposta, múltipla vs simples), o
-    que nem o EasyOCR nem o parser de regex conseguem — eles leem o print
-    como texto cru. Ver extract_with_groq.
+    Os dois LLMs vêm antes do EasyOCR porque entendem o print como a tip
+    que ele é (qual dos dois jogadores é o da aposta, múltipla vs
+    simples); o EasyOCR lê o print como texto cru e o parser de regex
+    tenta adivinhar o resto.
 
-    Se o Groq não estiver configurado (GROQ_API_KEY vazio) ou também
-    falhar, cai no EasyOCR local como antes — nunca levanta pro chamador.
+    A ordem entre eles é por custo de espera, não por qualidade: o Groq é
+    muito mais rápido, mas só aceita tip de TEXTO (o tier grátis dele
+    limita a 7k tokens de entrada por minuto e um print passa disso — ver
+    _groq_cabe_no_limite). Quando há print, quem atende é o OpenRouter,
+    cujo free tier não tem teto de tokens por minuto.
+
+    Nenhuma etapa levanta pro chamador: o que falha vira log e passa a vez.
     """
+    tentativas: list[tuple[str, str, object]] = []
     if settings.GROQ_API_KEY and _groq_cabe_no_limite(image_path):
+        tentativas.append(("Groq", settings.GROQ_MODEL, extract_with_groq))
+    if settings.OPENROUTER_API_KEY:
+        tentativas.append(("OpenRouter", settings.OPENROUTER_MODEL, extract_with_openrouter))
+
+    for rotulo, modelo, funcao in tentativas:
         try:
-            bet = extract_with_groq(image_path, caption_text)
+            bet = funcao(image_path, caption_text)  # type: ignore[operator]
             if bet.valido or bet.odd is not None:
-                logger.info("Groq atendeu no lugar do Gemini.")
+                logger.info("%s (%s) atendeu no lugar do Gemini.", rotulo, modelo)
                 return bet
-            logger.warning("Groq respondeu, mas sem dado aproveitável — seguindo pro EasyOCR.")
+            logger.warning("%s respondeu, mas sem dado aproveitável — próxima opção.", rotulo)
         except Exception:
-            logger.exception("Falha no Groq (backup do Gemini), seguindo pro EasyOCR.")
+            logger.exception("Falha no %s (backup do Gemini) — próxima opção.", rotulo)
 
     # 90s: generoso o bastante pra baixar os modelos na 1ª chamada de um
     # runner novo (~200MB) e ler 1 imagem, mas curto o bastante pra sempre
